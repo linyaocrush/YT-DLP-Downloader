@@ -15,12 +15,17 @@ public interface IYtDlpCli
 
     Task<string?> GetVersionAsync(CancellationToken cancellationToken = default);
 
-    Task<MediaInfo> GetMediaInfoAsync(string url, CancellationToken cancellationToken = default);
+    Task<MediaInfo> GetMediaInfoAsync(
+        string url,
+        string? cookieFile = null,
+        CancellationToken cancellationToken = default);
 
     Task<DownloadOutcome> DownloadAsync(
         string url,
         string formatExpression,
         string outputDirectory,
+        string? cookieFile = null,
+        int concurrentFragments = 1,
         IProgress<DownloadUpdate>? progress = null,
         CancellationToken cancellationToken = default);
 }
@@ -76,14 +81,18 @@ public sealed class YtDlpCli : IYtDlpCli
         return result.ExitCode == 0 ? result.StandardOutput.Trim() : null;
     }
 
-    public async Task<MediaInfo> GetMediaInfoAsync(string url, CancellationToken cancellationToken = default)
+    public async Task<MediaInfo> GetMediaInfoAsync(
+        string url,
+        string? cookieFile = null,
+        CancellationToken cancellationToken = default)
     {
         var exe = _paths.Resolve() ?? throw new YtDlpException(NotConfiguredMessage);
 
-        var result = await _runner.RunAsync(
-            exe,
-            new[] { "--skip-download", "--no-playlist", "--no-warnings", "--dump-single-json", url },
-            cancellationToken: cancellationToken);
+        var args = new List<string> { "--skip-download", "--no-playlist", "--no-warnings", "--dump-single-json" };
+        AddCookieArguments(args, cookieFile);
+        args.Add(url);
+
+        var result = await _runner.RunAsync(exe, args, cancellationToken: cancellationToken);
 
         if (result.Cancelled)
             throw new OperationCanceledException(cancellationToken);
@@ -105,6 +114,8 @@ public sealed class YtDlpCli : IYtDlpCli
         string url,
         string formatExpression,
         string outputDirectory,
+        string? cookieFile = null,
+        int concurrentFragments = 1,
         IProgress<DownloadUpdate>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -122,15 +133,23 @@ public sealed class YtDlpCli : IYtDlpCli
         }
 
         var template = Path.Combine(outputDirectory, "%(title)s [%(id)s].%(ext)s");
-        var args = new[]
+        var args = new List<string>
         {
             "--no-playlist",
             "--newline",
             "--no-warnings",
             "-f", formatExpression,
             "-o", template,
-            url,
         };
+        AddCookieArguments(args, cookieFile);
+
+        if (concurrentFragments > 1)
+        {
+            args.Add("--concurrent-fragments");
+            args.Add(concurrentFragments.ToString());
+        }
+
+        args.Add(url);
 
         string? lastDestination = null;
         string? finalPath = null;
@@ -187,6 +206,15 @@ public sealed class YtDlpCli : IYtDlpCli
         {
             return new DownloadOutcome(false, true, null, null);
         }
+    }
+
+    private static void AddCookieArguments(ICollection<string> args, string? cookieFile)
+    {
+        if (string.IsNullOrWhiteSpace(cookieFile))
+            return;
+
+        args.Add("--cookies");
+        args.Add(cookieFile.Trim());
     }
 
     private static string LastMeaningful(string stderr, string stdout)

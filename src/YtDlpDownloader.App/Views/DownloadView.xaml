@@ -17,6 +17,8 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <!-- URL -->
@@ -57,12 +59,46 @@
                             Command="{Binding BrowseFolderCommand}" />
                 </Grid>
 
+                <!-- cookie file -->
+                <Grid Grid.Row="2" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Cookie 文件"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}" />
+                    <TextBox Grid.Column="1"
+                             Margin="8,0"
+                             Text="{Binding CookieFile, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="{Binding CookieFile}" />
+                    <Button Grid.Column="2"
+                            Content="浏览…"
+                            VerticalAlignment="Center"
+                            Command="{Binding BrowseCookieFileCommand}" />
+                    <Button Grid.Column="3"
+                            Content="清除"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center"
+                            Command="{Binding ClearCookieFileCommand}" />
+                </Grid>
+
+                <TextBlock Grid.Row="3"
+                           Margin="80,6,8,0"
+                           Text="可选：用于需要登录或年龄限制的视频，一般为 Netscape 格式的 txt 文件"
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Foreground="{StaticResource TextSecondaryBrush}" />
+
                 <!-- download mode + actions -->
-                <Grid Grid.Row="2" Margin="0,16,0,0">
+                <Grid Grid.Row="4" Margin="0,16,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
@@ -82,6 +118,18 @@
                     </StackPanel>
                     <StackPanel Grid.Column="3"
                                 Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="0,0,16,0">
+                        <TextBlock Text="线程数"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                        <TextBox Width="56"
+                                 Text="{Binding DownloadThreads, UpdateSourceTrigger=LostFocus}"
+                                 ToolTip="同时下载的分片数（1-64），默认 4" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="4"
+                                Orientation="Horizontal"
                                 VerticalAlignment="Center">
                         <Button Content="开始下载"
                                 Style="{StaticResource AccentButton}"
@@ -90,7 +138,7 @@
                                 Margin="8,0,0,0"
                                 Command="{Binding CancelCommand}" />
                     </StackPanel>
-                    <TextBlock Grid.Column="4"
+                    <TextBlock Grid.Column="5"
                                Text="{Binding YtDlpStatus}"
                                VerticalAlignment="Center"
                                Margin="16,0,0,0"

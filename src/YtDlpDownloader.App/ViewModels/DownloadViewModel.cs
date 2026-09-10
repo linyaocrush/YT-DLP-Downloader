@@ -38,6 +38,8 @@ public sealed class DownloadViewModel : ObservableObject
     private string _videoTitle = string.Empty;
     private string _metaText = string.Empty;
     private string _selectionHint = string.Empty;
+    private string _cookieFile = string.Empty;
+    private int _downloadThreads = 4;
 
     private VideoSource? _selectedVideo;
     private AudioSource? _selectedAudio;
@@ -50,6 +52,10 @@ public sealed class DownloadViewModel : ObservableObject
         _downloadDirectory = string.IsNullOrWhiteSpace(settings.Settings.DownloadDirectory)
             ? GetDefaultDownloadDirectory()
             : settings.Settings.DownloadDirectory;
+        _cookieFile = settings.Settings.CookieFile ?? string.Empty;
+        _downloadThreads = settings.Settings.DownloadThreads >= 1
+            ? settings.Settings.DownloadThreads
+            : 4;
 
         VideoSources = new ObservableCollection<VideoSource>();
         AudioSources = new ObservableCollection<AudioSource>();
@@ -59,6 +65,8 @@ public sealed class DownloadViewModel : ObservableObject
         DownloadCommand = new AsyncRelayCommand(DownloadAsync, CanDownload);
         CancelCommand = new RelayCommand(Cancel, CanCancel);
         BrowseFolderCommand = new RelayCommand(BrowseFolder);
+        BrowseCookieFileCommand = new RelayCommand(BrowseCookieFile);
+        ClearCookieFileCommand = new RelayCommand(() => CookieFile = string.Empty, () => HasCookieFile);
 
         RefreshYtDlpStatus();
         StatusText = "就绪：输入视频链接后点击“解析”，即可查看可用的画质与音质源。";
@@ -73,6 +81,8 @@ public sealed class DownloadViewModel : ObservableObject
     public AsyncRelayCommand DownloadCommand { get; }
     public RelayCommand CancelCommand { get; }
     public RelayCommand BrowseFolderCommand { get; }
+    public RelayCommand BrowseCookieFileCommand { get; }
+    public RelayCommand ClearCookieFileCommand { get; }
 
     public string Url
     {
@@ -99,6 +109,39 @@ public sealed class DownloadViewModel : ObservableObject
                 return;
 
             _settings.Settings.DownloadDirectory = _downloadDirectory.Trim();
+            _settings.Save();
+        }
+    }
+
+    /// <summary>Optional cookies file (Netscape txt) forwarded to yt-dlp via --cookies.</summary>
+    public string CookieFile
+    {
+        get => _cookieFile;
+        set
+        {
+            if (!SetProperty(ref _cookieFile, value ?? string.Empty))
+                return;
+
+            _settings.Settings.CookieFile = _cookieFile.Trim();
+            _settings.Save();
+            OnPropertyChanged(nameof(HasCookieFile));
+            ClearCookieFileCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    public bool HasCookieFile => !string.IsNullOrWhiteSpace(_cookieFile);
+
+    /// <summary>Number of fragments downloaded concurrently (1-64).</summary>
+    public int DownloadThreads
+    {
+        get => _downloadThreads;
+        set
+        {
+            var clamped = Math.Clamp(value, 1, 64);
+            if (!SetProperty(ref _downloadThreads, clamped))
+                return;
+
+            _settings.Settings.DownloadThreads = clamped;
             _settings.Save();
         }
     }
@@ -307,7 +350,7 @@ public sealed class DownloadViewModel : ObservableObject
         try
         {
             var url = Url.Trim();
-            var info = await _cli.GetMediaInfoAsync(url, _cts.Token);
+            var info = await _cli.GetMediaInfoAsync(url, CookieFile, _cts.Token);
 
             ClearParseResult();
             VideoTitle = info.Title;
@@ -364,7 +407,7 @@ public sealed class DownloadViewModel : ObservableObject
         try
         {
             var progress = new Progress<DownloadUpdate>(ApplyUpdate);
-            var outcome = await _cli.DownloadAsync(Url.Trim(), expression, directory, progress, _cts.Token);
+            var outcome = await _cli.DownloadAsync(Url.Trim(), expression, directory, CookieFile, DownloadThreads, progress, _cts.Token);
 
             if (outcome.Cancelled)
             {
@@ -432,6 +475,25 @@ public sealed class DownloadViewModel : ObservableObject
 
         if (result == System.Windows.Forms.DialogResult.OK)
             DownloadDirectory = dialog.SelectedPath;
+    }
+
+    private void BrowseCookieFile()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择 Cookie 文件",
+            Filter = "Cookie 文件 (*.txt)|*.txt|所有文件 (*.*)|*.*",
+            CheckFileExists = true,
+        };
+
+        var directory = Path.GetDirectoryName(CookieFile);
+        if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+            dialog.InitialDirectory = directory;
+
+        var owner = Application.Current?.MainWindow;
+        var confirmed = owner is null ? dialog.ShowDialog() : dialog.ShowDialog(owner);
+        if (confirmed == true)
+            CookieFile = dialog.FileName;
     }
 
     private void SetBusy(bool busy) => IsBusy = busy;
