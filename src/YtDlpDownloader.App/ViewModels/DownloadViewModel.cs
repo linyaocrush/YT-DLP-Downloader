@@ -1,7 +1,10 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using YtDlpDownloader.Core.Mvvm;
 using YtDlpDownloader.Core.Models;
 using YtDlpDownloader.Core.Services;
@@ -13,6 +16,8 @@ public sealed class DownloadViewModel : ObservableObject
     private const string AutoFormatExpression = "bv*+ba/b";
     private const int MaxLogLines = 1000;
 
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+
     private readonly ISettingsService _settings;
     private readonly IYtDlpCli _cli;
 
@@ -21,7 +26,10 @@ public sealed class DownloadViewModel : ObservableObject
     private bool _isBusy;
     private bool _isManualMode;
     private bool _isProgressVisible;
+    private bool _hasMediaInfo;
     private double _progress;
+
+    private ImageSource? _thumbnail;
 
     private string _url = string.Empty;
     private string _downloadDirectory = string.Empty;
@@ -141,6 +149,25 @@ public sealed class DownloadViewModel : ObservableObject
         private set => SetProperty(ref _metaText, value);
     }
 
+    /// <summary>Cover image kept in memory only (never written to disk).</summary>
+    public ImageSource? Thumbnail
+    {
+        get => _thumbnail;
+        private set
+        {
+            if (SetProperty(ref _thumbnail, value))
+                OnPropertyChanged(nameof(HasThumbnail));
+        }
+    }
+
+    public bool HasThumbnail => _thumbnail is not null;
+
+    public bool HasMediaInfo
+    {
+        get => _hasMediaInfo;
+        private set => SetProperty(ref _hasMediaInfo, value);
+    }
+
     public string SelectionHint
     {
         get => _selectionHint;
@@ -217,8 +244,17 @@ public sealed class DownloadViewModel : ObservableObject
         AudioSources.Clear();
         VideoTitle = string.Empty;
         MetaText = string.Empty;
+        Thumbnail = null;
+        HasMediaInfo = false;
         SelectedVideo = null;
         SelectedAudio = null;
+    }
+
+    /// <summary>Releases the in-memory cover image (called on application shutdown).</summary>
+    public void Cleanup()
+    {
+        Thumbnail = null;
+        Logs.Clear();
     }
 
     private void NotifyStateChanged()
@@ -273,15 +309,18 @@ public sealed class DownloadViewModel : ObservableObject
             var url = Url.Trim();
             var info = await _cli.GetMediaInfoAsync(url, _cts.Token);
 
+            ClearParseResult();
             VideoTitle = info.Title;
             MetaText = $"ID: {info.Id}    时长: {info.DurationText}"
                 + (string.IsNullOrEmpty(info.Uploader) ? string.Empty : $"    上传者: {info.Uploader}");
+            HasMediaInfo = true;
 
-            ClearParseResult();
             foreach (var video in info.Videos)
                 VideoSources.Add(video);
             foreach (var audio in info.Audios)
                 AudioSources.Add(audio);
+
+            Thumbnail = await LoadThumbnailAsync(info.ThumbnailUrl, _cts.Token);
 
             StatusText = $"解析完成：{info.Title}（{VideoSources.Count} 个视频源，{AudioSources.Count} 个音频源）";
         }
@@ -402,6 +441,35 @@ public sealed class DownloadViewModel : ObservableObject
         Logs.Add(line);
         if (Logs.Count > MaxLogLines)
             Logs.RemoveAt(0);
+    }
+
+    private static async Task<ImageSource?> LoadThumbnailAsync(string? url, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync(url, cancellationToken);
+            using var stream = new MemoryStream(bytes);
+
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.StreamSource = stream;
+            image.DecodePixelWidth = 360;
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string GetDefaultDownloadDirectory()

@@ -42,6 +42,7 @@ public sealed record MediaInfo(
     string WebpageUrl,
     TimeSpan? Duration,
     string? Uploader,
+    string? ThumbnailUrl,
     IReadOnlyList<VideoSource> Videos,
     IReadOnlyList<AudioSource> Audios)
 {

@@ -38,4 +38,10 @@ public partial class App : Application
         MainWindow = mainWindow;
         mainWindow.Show();
     }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _download?.Cleanup();
+        base.OnExit(e);
+    }
 }

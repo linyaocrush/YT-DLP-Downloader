@@ -97,7 +97,36 @@ public sealed class MediaInfoParser : IMediaInfoParser
         if (videos.Count == 0 && audios.Count == 0)
             throw new InvalidDataException("未解析到任何可用的视频/音频格式");
 
-        return new MediaInfo(id, title, webpage, duration, uploader, videos, audios);
+        return new MediaInfo(id, title, webpage, duration, uploader, BestThumbnail(root), videos, audios);
+    }
+
+    /// <summary>Prefers the top-level "thumbnail" URL, otherwise the largest entry of "thumbnails".</summary>
+    private static string? BestThumbnail(JsonElement root)
+    {
+        var direct = Str(root, "thumbnail");
+        if (!string.IsNullOrEmpty(direct))
+            return direct;
+
+        if (!root.TryGetProperty("thumbnails", out var thumbnails) || thumbnails.ValueKind != JsonValueKind.Array)
+            return null;
+
+        string? best = null;
+        var bestArea = -1d;
+        foreach (var thumbnail in thumbnails.EnumerateArray())
+        {
+            var url = Str(thumbnail, "url");
+            if (string.IsNullOrEmpty(url))
+                continue;
+
+            var area = (Num(thumbnail, "width") ?? 0) * (Num(thumbnail, "height") ?? 0);
+            if (area >= bestArea)
+            {
+                bestArea = area;
+                best = url;
+            }
+        }
+
+        return best;
     }
 
     private static bool IsPresent(JsonElement obj, string name)
