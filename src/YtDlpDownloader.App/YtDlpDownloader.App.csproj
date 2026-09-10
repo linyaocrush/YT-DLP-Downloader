@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>YtDlpDownloader.App</RootNamespace>
+    <AssemblyName>YtDlpDownloader</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\YtDlpDownloader.Core\YtDlpDownloader.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- UseWindowsForms brings in a global using System.Windows.Forms that clashes with WPF; we reference it fully-qualified. -->
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/YtDlpDownloader.App/YtDlpDownloader.App.csproj" />
+    <Project Path="src/YtDlpDownloader.Core/YtDlpDownloader.Core.csproj" />
+  </Folder>
+</Solution>

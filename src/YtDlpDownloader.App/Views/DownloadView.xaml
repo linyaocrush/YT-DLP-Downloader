@@ -1,0 +1,213 @@
+<UserControl x:Class="YtDlpDownloader.App.Views.DownloadView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Row 0: URL input -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="视频链接："
+                       VerticalAlignment="Center" />
+            <TextBox Grid.Column="1"
+                     Margin="8,0"
+                     Padding="4,5"
+                     VerticalContentAlignment="Center"
+                     Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" />
+            <Button Grid.Column="2"
+                    Content="解析"
+                    Padding="16,6"
+                    Command="{Binding ParseCommand}" />
+        </Grid>
+
+        <!-- Row 1: save folder -->
+        <Grid Grid.Row="1" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="保存到："
+                       VerticalAlignment="Center" />
+            <TextBox Grid.Column="1"
+                     Margin="8,0"
+                     Padding="4,5"
+                     VerticalContentAlignment="Center"
+                     Text="{Binding DownloadDirectory, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="{Binding DownloadDirectory}" />
+            <Button Grid.Column="2"
+                    Content="浏览…"
+                    Padding="10,6"
+                    Command="{Binding BrowseFolderCommand}" />
+        </Grid>
+
+        <!-- Row 2: mode + actions -->
+        <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="下载方式："
+                           VerticalAlignment="Center" />
+                <RadioButton Content="自动选择（最高画质/音质并合成）"
+                             VerticalAlignment="Center"
+                             Margin="4,0"
+                             GroupName="DownloadMode"
+                             IsChecked="{Binding IsAutoMode}" />
+                <RadioButton Content="手动选择"
+                             VerticalAlignment="Center"
+                             Margin="8,0,0,0"
+                             GroupName="DownloadMode"
+                             IsChecked="{Binding IsManualMode}" />
+            </StackPanel>
+            <StackPanel Grid.Column="3"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center">
+                <Button Content="开始下载"
+                        Padding="16,6"
+                        Command="{Binding DownloadCommand}" />
+                <Button Content="取消"
+                        Padding="12,6"
+                        Margin="8,0,0,0"
+                        Command="{Binding CancelCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Row 3: parsed media title -->
+        <StackPanel Grid.Row="3" Margin="0,12,0,4">
+            <TextBlock Text="{Binding VideoTitle}"
+                       FontSize="16"
+                       FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding MetaText}"
+                       Foreground="Gray"
+                       Margin="0,2,0,0" />
+        </StackPanel>
+
+        <!-- Row 4: source tables -->
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top"
+                           Text="视频源"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,4" />
+                <DataGrid ItemsSource="{Binding VideoSources}"
+                          SelectedItem="{Binding SelectedVideo}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          SelectionMode="Single"
+                          HeadersVisibility="Column"
+                          RowHeight="24"
+                          EnableRowVirtualization="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="格式 ID" Binding="{Binding FormatId}" Width="66" />
+                        <DataGridTextColumn Header="分辨率" Binding="{Binding Resolution}" Width="96" />
+                        <DataGridTextColumn Header="帧率" Binding="{Binding FpsText}" Width="50" />
+                        <DataGridTextColumn Header="码率" Binding="{Binding BitrateText}" Width="104" />
+                        <DataGridTextColumn Header="视频编码" Binding="{Binding Codec}" Width="*" />
+                        <DataGridTextColumn Header="类型" Binding="{Binding Kind}" Width="92" />
+                        <DataGridTextColumn Header="容器" Binding="{Binding Container}" Width="56" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+
+            <DockPanel Grid.Column="2">
+                <TextBlock DockPanel.Dock="Top"
+                           Text="音频源"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,4" />
+                <DataGrid ItemsSource="{Binding AudioSources}"
+                          SelectedItem="{Binding SelectedAudio}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          SelectionMode="Single"
+                          HeadersVisibility="Column"
+                          RowHeight="24"
+                          EnableRowVirtualization="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="格式 ID" Binding="{Binding FormatId}" Width="66" />
+                        <DataGridTextColumn Header="码率" Binding="{Binding BitrateText}" Width="104" />
+                        <DataGridTextColumn Header="音频编码" Binding="{Binding Codec}" Width="*" />
+                        <DataGridTextColumn Header="容器" Binding="{Binding Container}" Width="56" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Grid>
+
+        <!-- Row 5: status + selection hint -->
+        <Grid Grid.Row="5" Margin="0,8,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0"
+                       Text="{Binding StatusText}"
+                       TextWrapping="Wrap" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding SelectionHint}"
+                       TextWrapping="Wrap"
+                       MaxWidth="320"
+                       Foreground="Gray"
+                       FontStyle="Italic"
+                       Margin="12,0,0,0"
+                       VerticalAlignment="Top" />
+        </Grid>
+
+        <!-- Row 6: progress + log -->
+        <Grid Grid.Row="6">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ProgressBar Grid.Column="0"
+                             Height="16"
+                             Margin="0,0,8,0"
+                             Minimum="0" Maximum="100"
+                             Value="{Binding Progress, Mode=OneWay}"
+                             Visibility="{Binding IsProgressVisible, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ProgressText}"
+                           VerticalAlignment="Center"
+                           Visibility="{Binding IsProgressVisible, Converter={StaticResource BoolToVis}}" />
+            </Grid>
+            <Expander Grid.Row="1"
+                      Header="日志"
+                      Margin="0,6,0,0"
+                      IsExpanded="True">
+                <ListBox ItemsSource="{Binding Logs}"
+                         Height="132"
+                         FontFamily="Consolas"
+                         FontSize="11"
+                         HorizontalContentAlignment="Stretch"
+                         VirtualizingPanel.ScrollUnit="Pixel" />
+            </Expander>
+        </Grid>
+    </Grid>
+</UserControl>
