@@ -26,6 +26,7 @@ public interface IYtDlpCli
         string outputDirectory,
         string? cookieFile = null,
         int concurrentFragments = 1,
+        string? outputTemplate = null,
         IProgress<DownloadUpdate>? progress = null,
         CancellationToken cancellationToken = default);
 }
@@ -88,7 +89,7 @@ public sealed class YtDlpCli : IYtDlpCli
     {
         var exe = _paths.Resolve() ?? throw new YtDlpException(NotConfiguredMessage);
 
-        var args = new List<string> { "--skip-download", "--no-playlist", "--no-warnings", "--dump-single-json" };
+        var args = new List<string> { "--encoding", "utf-8", "--skip-download", "--no-playlist", "--no-warnings", "--dump-single-json" };
         AddCookieArguments(args, cookieFile);
         args.Add(url);
 
@@ -116,6 +117,7 @@ public sealed class YtDlpCli : IYtDlpCli
         string outputDirectory,
         string? cookieFile = null,
         int concurrentFragments = 1,
+        string? outputTemplate = null,
         IProgress<DownloadUpdate>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -132,9 +134,13 @@ public sealed class YtDlpCli : IYtDlpCli
             return new DownloadOutcome(false, false, null, $"无法创建输出目录：{ex.Message}");
         }
 
-        var template = Path.Combine(outputDirectory, "%(title)s [%(id)s].%(ext)s");
+        var nameTemplate = string.IsNullOrWhiteSpace(outputTemplate)
+            ? "%(title)s.%(ext)s"
+            : outputTemplate.Trim();
+        var template = Path.Combine(outputDirectory, nameTemplate);
         var args = new List<string>
         {
+            "--encoding", "utf-8",
             "--no-playlist",
             "--newline",
             "--no-warnings",

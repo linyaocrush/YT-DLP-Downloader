@@ -64,6 +64,10 @@
                                TextWrapping="Wrap"
                                Foreground="{StaticResource TextSecondaryBrush}"
                                Text="本工具是对本地 yt-dlp / ffmpeg 的图形化封装，不内置或下载任何外部程序。链接与音视频源均直接解析自你提供的 URL。" />
+                    <TextBlock Margin="0,8,0,0"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Text="Copyright © 2026 凛ふわ狐" />
                 </StackPanel>
             </Border>
         </StackPanel>

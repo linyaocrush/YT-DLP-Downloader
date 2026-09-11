@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using YtDlpDownloader.Core.Models;
 
 namespace YtDlpDownloader.Core.Services;
@@ -15,7 +16,11 @@ public interface ISettingsService
 
 public sealed class SettingsService : ISettingsService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() },
+    };
 
     private readonly string _filePath;
     private readonly AppSettings _settings;

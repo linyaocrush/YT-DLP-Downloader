@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Interop;
@@ -16,6 +18,22 @@ public sealed class DownloadViewModel : ObservableObject
     private const string AutoFormatExpression = "bv*+ba/b";
     private const int MaxLogLines = 1000;
 
+    /// <summary>yt-dlp output-template fields offered as chip buttons.</summary>
+    private static readonly (string Token, string Label)[] TemplateFieldCatalog =
+    {
+        ("%(title)s", "标题"),
+        ("%(id)s", "视频 ID"),
+        ("%(uploader)s", "上传者"),
+        ("%(upload_date)s", "上传日期"),
+        ("%(resolution)s", "分辨率"),
+        ("%(fps)s", "帧率"),
+        ("%(duration)s", "时长"),
+        ("%(extractor)s", "站点"),
+        ("%(format_id)s", "格式 ID"),
+        ("%(vcodec)s", "视频编码"),
+        ("%(acodec)s", "音频编码"),
+    };
+
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     private readonly ISettingsService _settings;
@@ -25,6 +43,7 @@ public sealed class DownloadViewModel : ObservableObject
 
     private bool _isBusy;
     private bool _isManualMode;
+    private bool _isTemplateNameMode = true;
     private bool _isProgressVisible;
     private bool _hasMediaInfo;
     private double _progress;
@@ -39,6 +58,8 @@ public sealed class DownloadViewModel : ObservableObject
     private string _metaText = string.Empty;
     private string _selectionHint = string.Empty;
     private string _cookieFile = string.Empty;
+    private string _fixedFileName = string.Empty;
+    private string _outputTemplate = "%(title)s.%(ext)s";
     private int _downloadThreads = 4;
 
     private VideoSource? _selectedVideo;
@@ -56,10 +77,23 @@ public sealed class DownloadViewModel : ObservableObject
         _downloadThreads = settings.Settings.DownloadThreads >= 1
             ? settings.Settings.DownloadThreads
             : 4;
+        _isTemplateNameMode = settings.Settings.OutputNameMode != OutputNameMode.Fixed;
+        _fixedFileName = settings.Settings.OutputFileName ?? string.Empty;
 
         VideoSources = new ObservableCollection<VideoSource>();
         AudioSources = new ObservableCollection<AudioSource>();
         Logs = new ObservableCollection<string>();
+        OutputTemplateFields = new ObservableCollection<OutputTemplateField>();
+
+        var savedTemplate = settings.Settings.OutputTemplate ?? string.Empty;
+        foreach (var (token, label) in TemplateFieldCatalog)
+        {
+            var field = new OutputTemplateField(token, label, IsTokenSelected(savedTemplate, token));
+            field.PropertyChanged += OnTemplateFieldChanged;
+            OutputTemplateFields.Add(field);
+        }
+
+        RebuildOutputTemplate();
 
         ParseCommand = new AsyncRelayCommand(ParseAsync, CanParse);
         DownloadCommand = new AsyncRelayCommand(DownloadAsync, CanDownload);
@@ -76,6 +110,7 @@ public sealed class DownloadViewModel : ObservableObject
     public ObservableCollection<VideoSource> VideoSources { get; }
     public ObservableCollection<AudioSource> AudioSources { get; }
     public ObservableCollection<string> Logs { get; }
+    public ObservableCollection<OutputTemplateField> OutputTemplateFields { get; }
 
     public AsyncRelayCommand ParseCommand { get; }
     public AsyncRelayCommand DownloadCommand { get; }
@@ -145,6 +180,45 @@ public sealed class DownloadViewModel : ObservableObject
             _settings.Save();
         }
     }
+
+    /// <summary>True when the output name is composed from template field chips.</summary>
+    public bool IsTemplateNameMode
+    {
+        get => _isTemplateNameMode;
+        set { if (value) SetTemplateNameMode(true); }
+    }
+
+    /// <summary>True when the user types a fixed output file name.</summary>
+    public bool IsFixedNameMode
+    {
+        get => !_isTemplateNameMode;
+        set { if (value) SetTemplateNameMode(false); }
+    }
+
+    /// <summary>Read-only preview of the assembled yt-dlp output template.</summary>
+    public string OutputTemplate
+    {
+        get => _outputTemplate;
+        private set => SetProperty(ref _outputTemplate, value);
+    }
+
+    /// <summary>Base file name used in fixed-name mode (extension is appended automatically).</summary>
+    public string FixedFileName
+    {
+        get => _fixedFileName;
+        set
+        {
+            if (!SetProperty(ref _fixedFileName, value ?? string.Empty))
+                return;
+
+            _settings.Settings.OutputFileName = _fixedFileName.Trim();
+            _settings.Save();
+        }
+    }
+
+    public string OutputNameHint => IsTemplateNameMode
+        ? "模板模式：点击下方字段按钮拼装文件名，再次点击可移除；扩展名（.%(ext)s）会自动添加。"
+        : "文件名模式：直接输入文件名即可，无需填写扩展名，程序会自动添加。";
 
     public bool IsBusy
     {
@@ -271,6 +345,65 @@ public sealed class DownloadViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAutoMode));
         UpdateSelectionHint();
         NotifyStateChanged();
+    }
+
+    private void SetTemplateNameMode(bool template)
+    {
+        if (_isTemplateNameMode == template)
+            return;
+
+        _isTemplateNameMode = template;
+        _settings.Settings.OutputNameMode = template ? OutputNameMode.Template : OutputNameMode.Fixed;
+        _settings.Save();
+        OnPropertyChanged(nameof(IsTemplateNameMode));
+        OnPropertyChanged(nameof(IsFixedNameMode));
+        OnPropertyChanged(nameof(OutputNameHint));
+    }
+
+    private static bool IsTokenSelected(string template, string token)
+        => !string.IsNullOrEmpty(template)
+           && template.Contains(token, StringComparison.OrdinalIgnoreCase);
+
+    private void OnTemplateFieldChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(OutputTemplateField.IsSelected))
+            RebuildOutputTemplate();
+    }
+
+    private void RebuildOutputTemplate()
+    {
+        var selected = OutputTemplateFields.Where(field => field.IsSelected).ToList();
+        if (selected.Count == 0)
+        {
+            var title = OutputTemplateFields.FirstOrDefault(
+                field => string.Equals(field.Token, "%(title)s", StringComparison.OrdinalIgnoreCase));
+            if (title is not null)
+            {
+                title.IsSelected = true;
+                return;
+            }
+        }
+
+        var fields = string.Join(" ", selected.Select(field => field.Token));
+        OutputTemplate = $"{fields}.%(ext)s";
+        _settings.Settings.OutputTemplate = fields;
+        _settings.Save();
+    }
+
+    private string? BuildOutputTemplate()
+    {
+        if (IsFixedNameMode)
+        {
+            var name = _fixedFileName.Trim();
+            if (name.Length == 0)
+                return null;
+
+            return name.Contains("%(ext)s", StringComparison.OrdinalIgnoreCase)
+                ? name
+                : $"{name}.%(ext)s";
+        }
+
+        return string.IsNullOrWhiteSpace(_outputTemplate) ? null : _outputTemplate;
     }
 
     public void RefreshYtDlpStatus()
@@ -407,7 +540,8 @@ public sealed class DownloadViewModel : ObservableObject
         try
         {
             var progress = new Progress<DownloadUpdate>(ApplyUpdate);
-            var outcome = await _cli.DownloadAsync(Url.Trim(), expression, directory, CookieFile, DownloadThreads, progress, _cts.Token);
+            var outcome = await _cli.DownloadAsync(
+                Url.Trim(), expression, directory, CookieFile, DownloadThreads, BuildOutputTemplate(), progress, _cts.Token);
 
             if (outcome.Cancelled)
             {

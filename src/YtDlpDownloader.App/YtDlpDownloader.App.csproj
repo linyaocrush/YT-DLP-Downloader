@@ -9,6 +9,15 @@
     <Nullable>enable</Nullable>
     <RootNamespace>YtDlpDownloader.App</RootNamespace>
     <AssemblyName>YtDlpDownloader</AssemblyName>
+    <AssemblyTitle>YT-DLP Downloader</AssemblyTitle>
+    <Product>YT-DLP Downloader</Product>
+    <Description>基于本地 yt-dlp / ffmpeg 的视频下载工具</Description>
+    <Company>凛ふわ狐</Company>
+    <Authors>凛ふわ狐</Authors>
+    <Copyright>Copyright © 2026 凛ふわ狐</Copyright>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>
