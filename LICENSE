@@ -1,0 +1,117 @@
+YT-DLP Downloader 非商业相同方式共享许可证 1.0
+YT-DLP Downloader Non-Commercial Share-Alike License 1.0
+
+Copyright (c) 2026 凛ふわ狐
+项目名称：YT-DLP Downloader
+
+
+────────────────────────────────────────────────────────────
+【中文版】
+────────────────────────────────────────────────────────────
+
+一、定义
+
+1. “本作品”指 YT-DLP Downloader 项目的源代码、资源文件、文档及其他
+   随附文件。
+2. “演绎作品”指基于本作品进行修改、增删、改编或其他改动后形成的作品。
+3. “非商业目的”指不以营利或获取商业利益为目的的使用。
+4. “分发”指以任何形式向第三方提供本作品或其演绎作品的副本。
+5. “相同方式共享”指以与本许可证完全相同的条款分发演绎作品。
+
+二、授权
+
+在遵守本许可证全部条件的前提下，任何人均可免费、不受限制地：
+
+  (a) 使用、复制、运行本作品；
+  (b) 修改本作品并创作演绎作品；
+  (c) 分发本作品及其演绎作品。
+
+三、条件
+
+3.1 署名与来源标注
+    - 必须保留本作品中的所有版权声明与许可证声明；
+    - 必须在显著位置注明本作品来源于 “YT-DLP Downloader” 项目；
+    - 必须随附本许可证的完整副本。
+
+3.2 非商业性使用
+    - 不得将本作品或演绎作品用于任何商业目的，包括但不限于销售、
+      收费服务、广告变现、捆绑销售等直接或间接的营利行为。
+
+3.3 相同方式共享（开源）
+    - 分发演绎作品时，必须采用与本许可证相同的许可证；
+    - 必须向接收者提供演绎作品的完整源代码。
+
+3.4 不得附加限制
+    - 不得对本许可证授予的权利附加任何额外限制。
+
+四、终止
+
+违反本许可证任一条款，本许可证授予的权利自动终止。
+
+五、免责声明
+
+本作品按“现状”提供，不提供任何明示或默示的担保，包括但不限于对
+适销性、特定用途适用性及不侵权的担保。因使用本作品产生的任何风险
+与后果，均由使用者自行承担。
+
+
+────────────────────────────────────────────────────────────
+【English Version】
+────────────────────────────────────────────────────────────
+
+1. Definitions
+
+1.1 "Work" means the source code, resource files, documentation and other
+    files accompanying the YT-DLP Downloader project.
+1.2 "Derivative Work" means any work based on or derived from the Work,
+    including modifications, additions, deletions or adaptations.
+1.3 "Non-Commercial" means use that is not primarily intended for or
+    directed toward commercial advantage or monetary compensation.
+1.4 "Distribute" means to make the Work or a Derivative Work available to
+    any third party in any form.
+1.5 "Share-Alike" means to distribute a Derivative Work under the exact
+    same terms as this License.
+
+2. Grant
+
+Subject to compliance with all conditions of this License, everyone is
+free, without restriction, to:
+
+  (a) use, reproduce and run the Work;
+  (b) modify the Work and create Derivative Works;
+  (c) distribute the Work and Derivative Works.
+
+3. Conditions
+
+3.1 Attribution and Source Notice
+    - You must retain all copyright and license notices in the Work;
+    - You must clearly state, in a prominent place, that the work
+      originates from the "YT-DLP Downloader" project;
+    - You must include a complete copy of this License.
+
+3.2 Non-Commercial Use
+    - You may not use the Work or any Derivative Work for any commercial
+      purpose, including but not limited to sale, paid services,
+      advertising revenue or bundled sales.
+
+3.3 Share-Alike (Open Source)
+    - You must license any Derivative Work under this same License;
+    - You must make the complete source code of the Derivative Work
+      available to its recipients.
+
+3.4 No Additional Restrictions
+    - You may not impose any further restrictions on the rights granted
+      by this License.
+
+4. Termination
+
+Your rights under this License terminate automatically if you breach any
+term of this License.
+
+5. Disclaimer
+
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING
+FROM THE USE OF THE WORK.
