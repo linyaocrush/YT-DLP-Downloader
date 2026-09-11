@@ -29,4 +29,42 @@
     <Using Remove="System.Windows.Forms" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 仅在构建期使用（提供 $(Obfuscar) 指向 Obfuscar.Console.exe），不进入运行时与发布产物。 -->
+    <PackageReference Include="Obfuscar" Version="2.2.50" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Release 构建/发布完成后自动混淆输出程序集（规则见 obfuscar.xml）。
+    可用 -p:ObfuscateRelease=false 关闭；若需在发布后手动执行，也可直接运行：
+      Obfuscar.Console.exe obfuscar.xml
+  -->
+  <Target Name="ObfuscateRelease" AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Release' and '$(ObfuscateRelease)' != 'false'">
+    <PropertyGroup>
+      <_ObfuscatedDir>$(TargetDir)Obfuscated\</_ObfuscatedDir>
+      <_ObfuscarConfig>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)obfuscar.g.xml</_ObfuscarConfig>
+    </PropertyGroup>
+
+    <!-- 定位 WPF 引用程序集目录，供 Obfuscar 解析 WindowsBase 等框架依赖。 -->
+    <ItemGroup>
+      <_WpfRefAssembly Include="$(NetCoreTargetingPackRoot)\Microsoft.WindowsDesktop.App.Ref\*\ref\*\WindowsBase.dll" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_WpfRefDir>@(_WpfRefAssembly->'%(RootDir)%(Directory)')</_WpfRefDir>
+    </PropertyGroup>
+
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\obfuscar.xml" DestinationFiles="$(_ObfuscarConfig)" />
+    <XmlPoke Condition="'$(_WpfRefDir)' != ''"
+             XmlInputPath="$(_ObfuscarConfig)"
+             Query="//AssemblySearchPath/@path"
+             Value="$(_WpfRefDir)" />
+
+    <Exec Command="&quot;$(Obfuscar)&quot; -v:n &quot;$(_ObfuscarConfig)&quot;" WorkingDirectory="$(TargetDir)" />
+
+    <Copy SourceFiles="$(_ObfuscatedDir)YtDlpDownloader.dll;$(_ObfuscatedDir)YtDlpDownloader.Core.dll"
+          DestinationFolder="$(TargetDir)" />
+    <Message Importance="high" Text="Obfuscar 已混淆: $(TargetDir)YtDlpDownloader.dll" />
+  </Target>
+
 </Project>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Obfuscar 配置：仅在 Release 发行时由 MSBuild 调用（见 YtDlpDownloader.App.csproj 的 ObfuscateRelease 目标）。
+  调用时的工作目录为程序集输出目录，因此这里的相对路径基于该目录。
+
+  混淆策略（兼容 WPF）：
+    - KeepPublicApi=false + HidePrivateApi=true：混淆所有类型/成员（含 public）。
+    - RenameProperties=false / RenameEvents=false：保留属性与事件名，WPF 绑定（Binding Path）依赖属性名，必须保留。
+    - RenameFields=true：混淆字段。
+    - HideStrings=true：字符串常量加密存储。
+    - 跳过 XAML 中以类型名引用的命名空间（Views / Converters），否则 BAML 反序列化会失败。
+    - 跳过以字符串形式持久化的枚举成员（JSON 设置文件）。
+-->
+<Obfuscator>
+  <Var name="InPath" value="." />
+  <Var name="OutPath" value="Obfuscated" />
+
+  <!-- 由 MSBuild 在生成 obfuscar.g.xml 时改写为 WindowsDesktop 引用包目录，用于解析 WPF 框架程序集（WindowsBase 等）。 -->
+  <AssemblySearchPath path="." />
+
+  <Var name="KeepPublicApi" value="false" />
+  <Var name="HidePrivateApi" value="true" />
+  <Var name="RenameProperties" value="false" />
+  <Var name="RenameEvents" value="false" />
+  <Var name="RenameFields" value="true" />
+  <Var name="HideStrings" value="true" />
+  <Var name="ReuseNames" value="true" />
+  <Var name="UseUnicodeNames" value="false" />
+  <Var name="LogFile" value="Obfuscated\obfuscar.log" />
+
+  <Module file="$(InPath)\YtDlpDownloader.dll">
+    <SkipNamespace name="YtDlpDownloader.App.Views*" />
+    <SkipNamespace name="YtDlpDownloader.App.Converters*" />
+  </Module>
+
+  <Module file="$(InPath)\YtDlpDownloader.Core.dll">
+    <SkipType name="YtDlpDownloader.Core.Models.OutputNameMode" skipFields="true" />
+  </Module>
+</Obfuscator>
