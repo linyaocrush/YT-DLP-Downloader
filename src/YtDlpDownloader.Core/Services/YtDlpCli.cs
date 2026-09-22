@@ -59,12 +59,18 @@ public sealed class YtDlpCli : IYtDlpCli
 
     private readonly IProcessRunner _runner;
     private readonly IYtDlpPathService _paths;
+    private readonly IFfmpegPathService _ffmpegPaths;
     private readonly IMediaInfoParser _parser;
 
-    public YtDlpCli(IProcessRunner runner, IYtDlpPathService paths, IMediaInfoParser parser)
+    public YtDlpCli(
+        IProcessRunner runner,
+        IYtDlpPathService paths,
+        IFfmpegPathService ffmpegPaths,
+        IMediaInfoParser parser)
     {
         _runner = runner;
         _paths = paths;
+        _ffmpegPaths = ffmpegPaths;
         _parser = parser;
     }
 
@@ -148,6 +154,13 @@ public sealed class YtDlpCli : IYtDlpCli
             "-o", template,
         };
         AddCookieArguments(args, cookieFile);
+
+        // Only pass an explicit location when ffmpeg is not already on PATH (yt-dlp finds it there).
+        if (_ffmpegPaths.GetExplicitPathForYtDlp() is { } ffmpeg)
+        {
+            args.Add("--ffmpeg-location");
+            args.Add(ffmpeg);
+        }
 
         if (concurrentFragments > 1)
         {

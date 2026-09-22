@@ -18,11 +18,12 @@ public partial class App : Application
         // ---- Composition root (plain DI, no external packages) ----
         var settingsService = new SettingsService(AppContext.BaseDirectory);
         var pathService = new YtDlpPathService(settingsService);
+        var ffmpegPathService = new FfmpegPathService(settingsService);
         var runner = new ProcessRunner();
         var parser = new MediaInfoParser();
-        var cli = new YtDlpCli(runner, pathService, parser);
+        var cli = new YtDlpCli(runner, pathService, ffmpegPathService, parser);
 
-        var settingsViewModel = new SettingsViewModel(settingsService, pathService, cli);
+        var settingsViewModel = new SettingsViewModel(settingsService, pathService, ffmpegPathService, cli);
         var downloadViewModel = new DownloadViewModel(settingsService, cli);
 
         settingsService.Changed += (_, _) => downloadViewModel.RefreshYtDlpStatus();

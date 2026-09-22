@@ -46,12 +46,83 @@
                                    TextWrapping="Wrap"
                                    Foreground="{StaticResource TextPrimaryBrush}" />
                     </Border>
+                </StackPanel>
+            </Border>
 
-                    <TextBlock Margin="0,14,0,0"
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="ffmpeg 路径"
+                               FontSize="15"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="合成音视频、转换格式时需要 ffmpeg。程序会优先从系统 PATH 中自动查找 ffmpeg.exe；未找到时可在此手动指定。"
+                               Margin="0,4,0,0"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource TextSecondaryBrush}">
-                        <Run Text="合成音视频时需要 ffmpeg，请确保 ffmpeg 已加入系统 PATH。" />
-                    </TextBlock>
+                               Foreground="{StaticResource TextSecondaryBrush}" />
+
+                    <Grid Margin="0,14,0,0"
+                          Visibility="{Binding ShowFfmpegManualControls, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding FfmpegPath, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="ffmpeg.exe 的完整路径，例如 D:\tools\ffmpeg.exe" />
+                        <Button Grid.Column="1"
+                                Content="浏览…"
+                                Margin="8,0,0,0"
+                                Command="{Binding BrowseFfmpegCommand}" />
+                        <Button Grid.Column="2"
+                                Content="清除"
+                                Margin="8,0,0,0"
+                                Command="{Binding ClearFfmpegCommand}" />
+                    </Grid>
+
+                    <Border Margin="0,14,0,0"
+                            Padding="12,10"
+                            CornerRadius="6"
+                            Background="{StaticResource AccentSoftBrush}">
+                        <TextBlock Text="{Binding FfmpegStatus}"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="Cookie 文件夹"
+                               FontSize="15"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="选择一个文件夹，程序会自动识别其中的所有 Cookie 文件，并在下载页以下拉列表的形式供你选择。未设置时下载页将不使用 Cookie。"
+                               Margin="0,4,0,0"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondaryBrush}" />
+
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding CookieFolder, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="{Binding CookieFolder}" />
+                        <Button Grid.Column="1"
+                                Content="浏览…"
+                                Margin="8,0,0,0"
+                                Command="{Binding BrowseCookieFolderCommand}" />
+                        <Button Grid.Column="2"
+                                Content="清除"
+                                Margin="8,0,0,0"
+                                Command="{Binding ClearCookieFolderCommand}" />
+                    </Grid>
+
+                    <TextBlock Margin="0,10,0,0"
+                               Text="{Binding CookieFolderStatus}"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondaryBrush}" />
                 </StackPanel>
             </Border>
 

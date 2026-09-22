@@ -13,6 +13,16 @@ using YtDlpDownloader.Core.Services;
 
 namespace YtDlpDownloader.App.ViewModels;
 
+/// <summary>A selectable auto-mode resolution preference and its display label.</summary>
+public sealed record ResolutionOption(ResolutionPreference Value, string Label);
+
+/// <summary>A selectable cookie file (or the "none" entry) shown in the download view.</summary>
+public sealed record CookieOption(string? Path, string Label)
+{
+    /// <summary>The default entry meaning "do not send cookies".</summary>
+    public static CookieOption None { get; } = new(null, "无（不使用 Cookie）");
+}
+
 public sealed class DownloadViewModel : ObservableObject
 {
     private const string AutoFormatExpression = "bv*+ba/b";
@@ -36,6 +46,18 @@ public sealed class DownloadViewModel : ObservableObject
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
+    /// <summary>Resolution choices offered in auto mode (labels use ≤ / > symbols).</summary>
+    public static readonly IReadOnlyList<ResolutionOption> ResolutionCatalog = new[]
+    {
+        new ResolutionOption(ResolutionPreference.Best, "最佳"),
+        new ResolutionOption(ResolutionPreference.Above4K, "> 4K"),
+        new ResolutionOption(ResolutionPreference.UpTo4K, "≤ 4K"),
+        new ResolutionOption(ResolutionPreference.UpTo2K, "≤ 2K"),
+        new ResolutionOption(ResolutionPreference.UpTo1080P, "≤ 1080P"),
+        new ResolutionOption(ResolutionPreference.UpTo720P, "≤ 720P"),
+        new ResolutionOption(ResolutionPreference.UpTo360P, "≤ 360P"),
+    };
+
     private readonly ISettingsService _settings;
     private readonly IYtDlpCli _cli;
 
@@ -43,6 +65,8 @@ public sealed class DownloadViewModel : ObservableObject
 
     private bool _isBusy;
     private bool _isManualMode;
+    private DownloadKind _downloadKind = DownloadKind.Default;
+    private ResolutionOption _selectedResolution = ResolutionCatalog[0];
     private bool _isTemplateNameMode = true;
     private bool _isProgressVisible;
     private bool _hasMediaInfo;
@@ -57,13 +81,18 @@ public sealed class DownloadViewModel : ObservableObject
     private string _videoTitle = string.Empty;
     private string _metaText = string.Empty;
     private string _selectionHint = string.Empty;
-    private string _cookieFile = string.Empty;
     private string _fixedFileName = string.Empty;
     private string _outputTemplate = "%(title)s.%(ext)s";
     private int _downloadThreads = 4;
 
     private VideoSource? _selectedVideo;
     private AudioSource? _selectedAudio;
+
+    private CookieOption _selectedCookie = CookieOption.None;
+    private string _cookieFolder = string.Empty;
+    private string _cookieHint = string.Empty;
+    private bool _cookieNeedsSetup;
+    private bool _hasCookieFolder;
 
     public DownloadViewModel(ISettingsService settings, IYtDlpCli cli)
     {
@@ -73,17 +102,20 @@ public sealed class DownloadViewModel : ObservableObject
         _downloadDirectory = string.IsNullOrWhiteSpace(settings.Settings.DownloadDirectory)
             ? GetDefaultDownloadDirectory()
             : settings.Settings.DownloadDirectory;
-        _cookieFile = settings.Settings.CookieFile ?? string.Empty;
         _downloadThreads = settings.Settings.DownloadThreads >= 1
             ? settings.Settings.DownloadThreads
             : 4;
         _isTemplateNameMode = settings.Settings.OutputNameMode != OutputNameMode.Fixed;
         _fixedFileName = settings.Settings.OutputFileName ?? string.Empty;
+        _downloadKind = settings.Settings.DownloadKind;
+        _selectedResolution = ResolutionCatalog.FirstOrDefault(
+            option => option.Value == settings.Settings.Resolution) ?? ResolutionCatalog[0];
 
         VideoSources = new ObservableCollection<VideoSource>();
         AudioSources = new ObservableCollection<AudioSource>();
         Logs = new ObservableCollection<string>();
         OutputTemplateFields = new ObservableCollection<OutputTemplateField>();
+        CookieOptions = new ObservableCollection<CookieOption>();
 
         var savedTemplate = settings.Settings.OutputTemplate ?? string.Empty;
         foreach (var (token, label) in TemplateFieldCatalog)
@@ -99,8 +131,10 @@ public sealed class DownloadViewModel : ObservableObject
         DownloadCommand = new AsyncRelayCommand(DownloadAsync, CanDownload);
         CancelCommand = new RelayCommand(Cancel, CanCancel);
         BrowseFolderCommand = new RelayCommand(BrowseFolder);
-        BrowseCookieFileCommand = new RelayCommand(BrowseCookieFile);
-        ClearCookieFileCommand = new RelayCommand(() => CookieFile = string.Empty, () => HasCookieFile);
+        RefreshCookiesCommand = new RelayCommand(RefreshCookieOptions);
+
+        _settings.Changed += OnSettingsChanged;
+        RefreshCookieOptions();
 
         RefreshYtDlpStatus();
         StatusText = "就绪：输入视频链接后点击“解析”，即可查看可用的画质与音质源。";
@@ -112,12 +146,14 @@ public sealed class DownloadViewModel : ObservableObject
     public ObservableCollection<string> Logs { get; }
     public ObservableCollection<OutputTemplateField> OutputTemplateFields { get; }
 
+    /// <summary>Cookie files discovered in the configured folder, plus a leading "none" entry.</summary>
+    public ObservableCollection<CookieOption> CookieOptions { get; }
+
     public AsyncRelayCommand ParseCommand { get; }
     public AsyncRelayCommand DownloadCommand { get; }
     public RelayCommand CancelCommand { get; }
     public RelayCommand BrowseFolderCommand { get; }
-    public RelayCommand BrowseCookieFileCommand { get; }
-    public RelayCommand ClearCookieFileCommand { get; }
+    public RelayCommand RefreshCookiesCommand { get; }
 
     public string Url
     {
@@ -148,23 +184,47 @@ public sealed class DownloadViewModel : ObservableObject
         }
     }
 
-    /// <summary>Optional cookies file (Netscape txt) forwarded to yt-dlp via --cookies.</summary>
-    public string CookieFile
+    /// <summary>Currently selected cookie file (or <see cref="CookieOption.None"/>).</summary>
+    public CookieOption SelectedCookie
     {
-        get => _cookieFile;
+        get => _selectedCookie;
         set
         {
-            if (!SetProperty(ref _cookieFile, value ?? string.Empty))
+            if (value is null
+                || string.Equals(_selectedCookie.Path, value.Path, StringComparison.OrdinalIgnoreCase))
                 return;
 
-            _settings.Settings.CookieFile = _cookieFile.Trim();
+            _selectedCookie = value;
+            OnPropertyChanged();
+
+            _settings.Settings.CookieFile = value.Path ?? string.Empty;
             _settings.Save();
-            OnPropertyChanged(nameof(HasCookieFile));
-            ClearCookieFileCommand.NotifyCanExecuteChanged();
         }
     }
 
-    public bool HasCookieFile => !string.IsNullOrWhiteSpace(_cookieFile);
+    /// <summary>True when a valid cookie folder is configured.</summary>
+    public bool HasCookieFolder
+    {
+        get => _hasCookieFolder;
+        private set => SetProperty(ref _hasCookieFolder, value);
+    }
+
+    /// <summary>True when the user must configure a cookie folder in Settings.</summary>
+    public bool CookieNeedsSetup
+    {
+        get => _cookieNeedsSetup;
+        private set => SetProperty(ref _cookieNeedsSetup, value);
+    }
+
+    /// <summary>Contextual hint shown under the cookie selector.</summary>
+    public string CookieHint
+    {
+        get => _cookieHint;
+        private set => SetProperty(ref _cookieHint, value);
+    }
+
+    /// <summary>The path forwarded to yt-dlp via --cookies (empty when "none").</summary>
+    private string CookieArgument => _selectedCookie.Path ?? string.Empty;
 
     /// <summary>Number of fragments downloaded concurrently (1-64).</summary>
     public int DownloadThreads
@@ -240,6 +300,56 @@ public sealed class DownloadViewModel : ObservableObject
     {
         get => _isManualMode;
         set => SetManualMode(value);
+    }
+
+    /// <summary>Download both video and audio (default).</summary>
+    public bool IsDefaultKind
+    {
+        get => _downloadKind == DownloadKind.Default;
+        set { if (value) SetDownloadKind(DownloadKind.Default); }
+    }
+
+    /// <summary>Download the video stream only.</summary>
+    public bool IsVideoOnlyKind
+    {
+        get => _downloadKind == DownloadKind.VideoOnly;
+        set { if (value) SetDownloadKind(DownloadKind.VideoOnly); }
+    }
+
+    /// <summary>Download the audio stream only.</summary>
+    public bool IsAudioOnlyKind
+    {
+        get => _downloadKind == DownloadKind.AudioOnly;
+        set { if (value) SetDownloadKind(DownloadKind.AudioOnly); }
+    }
+
+    /// <summary>True when the video source list should be shown in manual mode.</summary>
+    public bool ShowVideoSources => _downloadKind != DownloadKind.AudioOnly;
+
+    /// <summary>True when the audio source list should be shown in manual mode.</summary>
+    public bool ShowAudioSources => _downloadKind != DownloadKind.VideoOnly;
+
+    /// <summary>True when both source lists are visible (default kind).</summary>
+    public bool ShowBothSources => ShowVideoSources && ShowAudioSources;
+
+    /// <summary>Available resolution choices for auto mode.</summary>
+    public IReadOnlyList<ResolutionOption> ResolutionOptions => ResolutionCatalog;
+
+    /// <summary>Resolution preference used to constrain the auto-selected video format.</summary>
+    public ResolutionOption SelectedResolution
+    {
+        get => _selectedResolution;
+        set
+        {
+            if (value is null || ReferenceEquals(_selectedResolution, value))
+                return;
+
+            _selectedResolution = value;
+            OnPropertyChanged();
+            _settings.Settings.Resolution = value.Value;
+            _settings.Save();
+            UpdateSelectionHint();
+        }
     }
 
     public string StatusText
@@ -343,6 +453,26 @@ public sealed class DownloadViewModel : ObservableObject
         _isManualMode = manual;
         OnPropertyChanged(nameof(IsManualMode));
         OnPropertyChanged(nameof(IsAutoMode));
+        UpdateSelectionHint();
+        NotifyStateChanged();
+    }
+
+    private void SetDownloadKind(DownloadKind kind)
+    {
+        if (_downloadKind == kind)
+            return;
+
+        _downloadKind = kind;
+        _settings.Settings.DownloadKind = kind;
+        _settings.Save();
+
+        OnPropertyChanged(nameof(IsDefaultKind));
+        OnPropertyChanged(nameof(IsVideoOnlyKind));
+        OnPropertyChanged(nameof(IsAudioOnlyKind));
+        OnPropertyChanged(nameof(ShowVideoSources));
+        OnPropertyChanged(nameof(ShowAudioSources));
+        OnPropertyChanged(nameof(ShowBothSources));
+
         UpdateSelectionHint();
         NotifyStateChanged();
     }
@@ -455,24 +585,86 @@ public sealed class DownloadViewModel : ObservableObject
     private bool CanCancel() => IsBusy;
 
     private bool ManualSelectionValid
-        => SelectedVideo is not null
-           && (SelectedVideo.HasAudio || SelectedAudio is not null);
+        => _downloadKind switch
+        {
+            DownloadKind.VideoOnly => SelectedVideo is not null,
+            DownloadKind.AudioOnly => SelectedAudio is not null,
+            _ => SelectedVideo is not null
+                 && (SelectedVideo.HasAudio || SelectedAudio is not null),
+        };
 
     private string ManualExpression
         => SelectedVideo!.HasAudio
             ? SelectedVideo.FormatId
             : $"{SelectedVideo.FormatId}+{SelectedAudio!.FormatId}";
 
+    private string BuildFormatExpression()
+    {
+        if (IsAutoMode)
+        {
+            var filter = _downloadKind == DownloadKind.AudioOnly
+                ? null
+                : ResolutionFilter(_selectedResolution.Value);
+
+            return _downloadKind switch
+            {
+                DownloadKind.VideoOnly => filter is null ? "bv" : $"bv{filter}",
+                DownloadKind.AudioOnly => "ba",
+                _ => filter is null ? AutoFormatExpression : $"bv*{filter}+ba/b{filter}",
+            };
+        }
+
+        return _downloadKind switch
+        {
+            DownloadKind.VideoOnly => SelectedVideo!.FormatId,
+            DownloadKind.AudioOnly => SelectedAudio!.FormatId,
+            _ => ManualExpression,
+        };
+    }
+
+    private static string? ResolutionFilter(ResolutionPreference preference) => preference switch
+    {
+        ResolutionPreference.Above4K => "[height>2160]",
+        ResolutionPreference.UpTo4K => "[height<=2160]",
+        ResolutionPreference.UpTo2K => "[height<=1440]",
+        ResolutionPreference.UpTo1080P => "[height<=1080]",
+        ResolutionPreference.UpTo720P => "[height<=720]",
+        ResolutionPreference.UpTo360P => "[height<=360]",
+        _ => null,
+    };
+
     private void UpdateSelectionHint()
     {
-        SelectionHint = IsManualMode
-            ? ManualSelectionValid
-                ? SelectedVideo!.HasAudio
-                    ? $"已选视频源 {SelectedVideo.FormatId}（音视频合一，单文件下载）"
-                    : $"已选：{SelectedVideo.FormatId} + {SelectedAudio!.FormatId}"
-                : "手动模式：请从上方列表选择一个视频源；纯视频源需再选择一个音频源用于合成。"
-            : "自动模式：将自动挑选最高分辨率的视频源与最高音质的音频源，由 yt-dlp 合成为完整视频。";
+        if (IsManualMode)
+        {
+            SelectionHint = _downloadKind switch
+            {
+                DownloadKind.VideoOnly => SelectedVideo is null
+                    ? "仅视频：请从上方列表选择一个视频源（仅下载画面，不含声音）。"
+                    : $"已选视频源 {SelectedVideo.FormatId}（仅视频，无声音）",
+                DownloadKind.AudioOnly => SelectedAudio is null
+                    ? "仅音频：请从上方列表选择一个音频源。"
+                    : $"已选音频源 {SelectedAudio.FormatId}（仅音频）",
+                _ => ManualSelectionValid
+                    ? SelectedVideo!.HasAudio
+                        ? $"已选视频源 {SelectedVideo.FormatId}（音视频合一，单文件下载）"
+                        : $"已选：{SelectedVideo.FormatId} + {SelectedAudio!.FormatId}"
+                    : "手动模式：请从上方列表选择一个视频源；纯视频源需再选择一个音频源用于合成。",
+            };
+            return;
+        }
+
+        SelectionHint = _downloadKind switch
+        {
+            DownloadKind.VideoOnly => $"仅视频：自动挑选最高画质视频源{ResolutionHintSuffix}，不下载声音。",
+            DownloadKind.AudioOnly => "仅音频：自动挑选最高音质的音频源。",
+            _ => $"自动模式：自动挑选最佳视频与音频并合成{ResolutionHintSuffix}。",
+        };
     }
+
+    private string ResolutionHintSuffix => _selectedResolution.Value == ResolutionPreference.Best
+        ? string.Empty
+        : $"（分辨率限制 {_selectedResolution.Label}）";
 
     private async Task ParseAsync()
     {
@@ -483,7 +675,7 @@ public sealed class DownloadViewModel : ObservableObject
         try
         {
             var url = Url.Trim();
-            var info = await _cli.GetMediaInfoAsync(url, CookieFile, _cts.Token);
+            var info = await _cli.GetMediaInfoAsync(url, CookieArgument, _cts.Token);
 
             ClearParseResult();
             VideoTitle = info.Title;
@@ -522,7 +714,7 @@ public sealed class DownloadViewModel : ObservableObject
 
     private async Task DownloadAsync()
     {
-        var expression = IsAutoMode ? AutoFormatExpression : ManualExpression;
+        var expression = BuildFormatExpression();
         var directory = string.IsNullOrWhiteSpace(DownloadDirectory)
             ? GetDefaultDownloadDirectory()
             : DownloadDirectory.Trim();
@@ -534,14 +726,19 @@ public sealed class DownloadViewModel : ObservableObject
         Logs.Clear();
 
         StatusText = IsAutoMode
-            ? "开始下载（自动选择最佳质量并合成）…"
+            ? _downloadKind switch
+            {
+                DownloadKind.VideoOnly => "开始下载（仅视频，自动选择最高画质）…",
+                DownloadKind.AudioOnly => "开始下载（仅音频，自动选择最高音质）…",
+                _ => "开始下载（自动选择最佳质量并合成）…",
+            }
             : $"开始下载（格式 {expression}）…";
 
         try
         {
             var progress = new Progress<DownloadUpdate>(ApplyUpdate);
             var outcome = await _cli.DownloadAsync(
-                Url.Trim(), expression, directory, CookieFile, DownloadThreads, BuildOutputTemplate(), progress, _cts.Token);
+                Url.Trim(), expression, directory, CookieArgument, DownloadThreads, BuildOutputTemplate(), progress, _cts.Token);
 
             if (outcome.Cancelled)
             {
@@ -611,23 +808,56 @@ public sealed class DownloadViewModel : ObservableObject
             DownloadDirectory = dialog.SelectedPath;
     }
 
-    private void BrowseCookieFile()
+    private void OnSettingsChanged(object? sender, EventArgs e)
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog
+        var folder = _settings.Settings.CookieFolder ?? string.Empty;
+        if (!string.Equals(folder, _cookieFolder, StringComparison.OrdinalIgnoreCase))
+            RefreshCookieOptions();
+    }
+
+    /// <summary>Rebuilds the cookie dropdown from the configured folder and restores the selection.</summary>
+    private void RefreshCookieOptions()
+    {
+        _cookieFolder = _settings.Settings.CookieFolder ?? string.Empty;
+        var savedPath = _settings.Settings.CookieFile ?? string.Empty;
+        var currentPath = _selectedCookie.Path;
+
+        var options = new List<CookieOption> { CookieOption.None };
+        if (Directory.Exists(_cookieFolder))
         {
-            Title = "选择 Cookie 文件",
-            Filter = "Cookie 文件 (*.txt)|*.txt|所有文件 (*.*)|*.*",
-            CheckFileExists = true,
-        };
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(_cookieFolder)
+                             .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+                    options.Add(new CookieOption(file, Path.GetFileName(file)));
+            }
+            catch
+            {
+                // Unreadable folder: fall back to the "none" entry only.
+            }
+        }
 
-        var directory = Path.GetDirectoryName(CookieFile);
-        if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
-            dialog.InitialDirectory = directory;
+        CookieOptions.Clear();
+        foreach (var option in options)
+            CookieOptions.Add(option);
 
-        var owner = Application.Current?.MainWindow;
-        var confirmed = owner is null ? dialog.ShowDialog() : dialog.ShowDialog(owner);
-        if (confirmed == true)
-            CookieFile = dialog.FileName;
+        _selectedCookie = options.FirstOrDefault(
+                              option => option.Path is not null
+                                        && string.Equals(option.Path, savedPath, StringComparison.OrdinalIgnoreCase))
+                          ?? options.FirstOrDefault(
+                              option => option.Path is not null
+                                        && string.Equals(option.Path, currentPath, StringComparison.OrdinalIgnoreCase))
+                          ?? CookieOption.None;
+
+        OnPropertyChanged(nameof(SelectedCookie));
+
+        HasCookieFolder = Directory.Exists(_cookieFolder);
+        CookieNeedsSetup = !HasCookieFolder;
+        CookieHint = !string.IsNullOrWhiteSpace(_cookieFolder) && !HasCookieFolder
+            ? "Cookie 文件夹不存在，请到“设置”页重新选择。"
+            : string.IsNullOrWhiteSpace(_cookieFolder)
+                ? "未设置 Cookie 文件夹。请到“设置”页选择一个文件夹，即可在此选择其中的 Cookie 文件。"
+                : "可选：用于需要登录或年龄限制的视频，从上方下拉列表选择 Cookie 文件。";
     }
 
     private void SetBusy(bool busy) => IsBusy = busy;
