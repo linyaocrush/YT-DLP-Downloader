@@ -35,5 +35,7 @@
 
   <Module file="$(InPath)\YtDlpDownloader.Core.dll">
     <SkipType name="YtDlpDownloader.Core.Models.OutputNameMode" skipFields="true" />
+    <SkipType name="YtDlpDownloader.Core.Models.ProxyProtocol" skipFields="true" />
+    <SkipType name="YtDlpDownloader.Core.Models.ProxyListMode" skipFields="true" />
   </Module>
 </Obfuscator>

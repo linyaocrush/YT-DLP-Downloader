@@ -330,9 +330,11 @@
                         </Grid>
                     </Border>
 
-                    <!-- resolution preference (auto mode only) -->
                     <StackPanel Grid.Column="2"
                                 Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                    <!-- resolution preference (auto mode only) -->
+                    <StackPanel Orientation="Horizontal"
                                 VerticalAlignment="Center"
                                 Margin="20,0,0,0">
                         <StackPanel.Style>
@@ -374,6 +376,27 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                     </StackPanel>
+
+                    <!-- proxy status indicator for the current URL -->
+                    <Border Margin="16,0,0,0"
+                            Padding="10,4"
+                            CornerRadius="12"
+                            VerticalAlignment="Center"
+                            Background="{StaticResource SubtleFillBrush}"
+                            ToolTip="{Binding ProxyStatusDetail}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8"
+                                     Height="8"
+                                     VerticalAlignment="Center"
+                                     Fill="{Binding ProxyStatusBrush}" />
+                            <TextBlock Text="{Binding ProxyStatusText}"
+                                       Margin="6,0,0,0"
+                                       VerticalAlignment="Center"
+                                       FontSize="12.5"
+                                       Foreground="{Binding ProxyStatusBrush}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
                 </Grid>
             </Grid>
         </Border>

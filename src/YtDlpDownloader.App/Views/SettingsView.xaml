@@ -11,6 +11,147 @@
 
             <Border Style="{StaticResource Card}">
                 <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="网络代理"
+                                       FontSize="15"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="开启后，下载与解析会按名单规则自动为 yt-dlp 添加 --proxy 参数。总开关关闭时永远不添加。"
+                                       Margin="0,4,0,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                        </StackPanel>
+                        <ToggleButton Grid.Column="1"
+                                      Style="{StaticResource AppSwitch}"
+                                      VerticalAlignment="Top"
+                                      Margin="12,2,0,0"
+                                      IsChecked="{Binding ProxyEnabled}"
+                                      ToolTip="代理总开关" />
+                    </Grid>
+
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="协议"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                        <ComboBox Grid.Column="1"
+                                  Width="100"
+                                  Margin="8,0,0,0"
+                                  Style="{StaticResource AppComboBox}"
+                                  ItemsSource="{Binding ProxyProtocolOptions}"
+                                  SelectedItem="{Binding SelectedProxyProtocol}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Grid.Column="3"
+                                   Text="IP / 主机"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                        <TextBox Grid.Column="4"
+                                 Margin="8,0"
+                                 Text="{Binding ProxyHost, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="例如 127.0.0.1 或 proxy.example.com" />
+                        <TextBlock Grid.Column="6"
+                                   Text="端口"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                        <TextBox Grid.Column="7"
+                                 Width="84"
+                                 Margin="8,0,0,0"
+                                 Text="{Binding ProxyPort, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="1-65535，例如 7890" />
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <TextBlock Text="名单模式"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0"
+                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                        <RadioButton Content="黑名单（名单内的网站不使用代理）"
+                                     GroupName="ProxyListMode"
+                                     Margin="0,0,20,0"
+                                     IsChecked="{Binding IsBlacklistMode}" />
+                        <RadioButton Content="白名单（仅名单内的网站使用代理）"
+                                     GroupName="ProxyListMode"
+                                     IsChecked="{Binding IsWhitelistMode}" />
+                    </StackPanel>
+
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding NewProxySite, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="例如 https://www.youtube.com/" />
+                        <Button Grid.Column="1"
+                                Content="添加网站"
+                                Margin="8,0,0,0"
+                                Command="{Binding AddProxySiteCommand}" />
+                    </Grid>
+
+                    <ItemsControl Margin="0,10,0,0"
+                                  ItemsSource="{Binding ProxySites}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource AccentSoftBrush}"
+                                        BorderBrush="{StaticResource AccentBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="13"
+                                        Padding="10,4"
+                                        Margin="0,0,8,8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding}"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{StaticResource AccentPressedBrush}" />
+                                        <Button Content="✕"
+                                                Width="18"
+                                                Height="18"
+                                                Padding="0"
+                                                Margin="8,0,0,0"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Foreground="{StaticResource AccentPressedBrush}"
+                                                Command="{Binding DataContext.RemoveProxySiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="移除该网站" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Margin="0,10,0,0"
+                               Text="{Binding ProxyStatus}"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextSecondaryBrush}" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
                     <TextBlock Text="yt-dlp 路径"
                                FontSize="15"
                                FontWeight="SemiBold" />

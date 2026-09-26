@@ -33,6 +33,24 @@ public sealed class AppSettings
 
     /// <summary>Preferred maximum video resolution (auto mode only).</summary>
     public ResolutionPreference Resolution { get; set; } = ResolutionPreference.Best;
+
+    /// <summary>Master switch: when false the proxy is never used, regardless of the site list.</summary>
+    public bool ProxyEnabled { get; set; }
+
+    /// <summary>Protocol prefix used when building the yt-dlp --proxy value.</summary>
+    public ProxyProtocol ProxyProtocol { get; set; } = ProxyProtocol.Http;
+
+    /// <summary>Proxy host or IP address.</summary>
+    public string ProxyHost { get; set; } = string.Empty;
+
+    /// <summary>Proxy port, kept as text so it can be edited freely before being validated.</summary>
+    public string ProxyPort { get; set; } = string.Empty;
+
+    /// <summary>Whether <see cref="ProxySites"/> is treated as an allow list or a deny list.</summary>
+    public ProxyListMode ProxyListMode { get; set; } = ProxyListMode.Whitelist;
+
+    /// <summary>Websites the proxy rule applies to (host names or URL prefixes).</summary>
+    public List<string> ProxySites { get; set; } = new();
 }
 
 /// <summary>Preferred video resolution used when yt-dlp picks the format automatically.</summary>
@@ -81,4 +99,27 @@ public enum OutputNameMode
 
     /// <summary>Use a user-supplied fixed base name.</summary>
     Fixed,
+}
+
+/// <summary>Protocol prefix for the configured proxy.</summary>
+public enum ProxyProtocol
+{
+    /// <summary>Plain HTTP proxy (http://).</summary>
+    Http,
+
+    /// <summary>HTTPS proxy (https://).</summary>
+    Https,
+
+    /// <summary>SOCKS5 proxy (socks5://).</summary>
+    Socks5,
+}
+
+/// <summary>How the website list is interpreted by the proxy rule.</summary>
+public enum ProxyListMode
+{
+    /// <summary>Only the listed websites use the proxy; everything else connects directly.</summary>
+    Whitelist,
+
+    /// <summary>All websites except the listed ones use the proxy.</summary>
+    Blacklist,
 }

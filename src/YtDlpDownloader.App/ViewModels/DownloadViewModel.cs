@@ -94,6 +94,13 @@ public sealed class DownloadViewModel : ObservableObject
     private bool _cookieNeedsSetup;
     private bool _hasCookieFolder;
 
+    private bool _proxyWillApply;
+    private string _proxyStatusText = string.Empty;
+    private string _proxyStatusDetail = string.Empty;
+
+    private static readonly System.Windows.Media.Brush ProxyOnBrush = CreateFrozenBrush(0x0F, 0x7B, 0x0F);
+    private static readonly System.Windows.Media.Brush ProxyOffBrush = CreateFrozenBrush(0x9A, 0x9A, 0x9A);
+
     public DownloadViewModel(ISettingsService settings, IYtDlpCli cli)
     {
         _settings = settings;
@@ -135,6 +142,7 @@ public sealed class DownloadViewModel : ObservableObject
 
         _settings.Changed += OnSettingsChanged;
         RefreshCookieOptions();
+        RefreshProxyStatus();
 
         RefreshYtDlpStatus();
         StatusText = "就绪：输入视频链接后点击“解析”，即可查看可用的画质与音质源。";
@@ -167,6 +175,7 @@ public sealed class DownloadViewModel : ObservableObject
             _url = newValue;
             OnPropertyChanged(nameof(Url));
             ClearParseResult();
+            RefreshProxyStatus();
             NotifyStateChanged();
         }
     }
@@ -225,6 +234,63 @@ public sealed class DownloadViewModel : ObservableObject
 
     /// <summary>The path forwarded to yt-dlp via --cookies (empty when "none").</summary>
     private string CookieArgument => _selectedCookie.Path ?? string.Empty;
+
+    /// <summary>The proxy URL forwarded to yt-dlp via --proxy (empty when unused).</summary>
+    private string ProxyArgument => _proxyWillApply
+        ? ProxyRules.BuildProxyUrl(_settings.Settings) ?? string.Empty
+        : string.Empty;
+
+    /// <summary>True when the current URL will be downloaded through the proxy.</summary>
+    public bool ProxyWillApply
+    {
+        get => _proxyWillApply;
+        private set => SetProperty(ref _proxyWillApply, value);
+    }
+
+    /// <summary>Short label for the proxy status indicator on the download page.</summary>
+    public string ProxyStatusText
+    {
+        get => _proxyStatusText;
+        private set => SetProperty(ref _proxyStatusText, value);
+    }
+
+    /// <summary>Longer explanation shown as the indicator's tooltip.</summary>
+    public string ProxyStatusDetail
+    {
+        get => _proxyStatusDetail;
+        private set => SetProperty(ref _proxyStatusDetail, value);
+    }
+
+    /// <summary>Indicator colour: green when the proxy applies, grey otherwise.</summary>
+    public System.Windows.Media.Brush ProxyStatusBrush => _proxyWillApply ? ProxyOnBrush : ProxyOffBrush;
+
+    /// <summary>Recomputes whether the current URL will use the proxy (settings or URL changed).</summary>
+    public void RefreshProxyStatus()
+    {
+        var settings = _settings.Settings;
+        var proxyUrl = ProxyRules.BuildProxyUrl(settings);
+        ProxyWillApply = ProxyRules.ShouldUseProxy(settings, Url);
+
+        if (proxyUrl is null)
+        {
+            ProxyStatusText = settings.ProxyEnabled ? "代理：未配置完整" : "代理：未启用";
+            ProxyStatusDetail = settings.ProxyEnabled
+                ? "已在设置中开启代理，但 IP 或端口无效，本次不会使用代理。"
+                : "代理总开关已关闭，本次下载与解析都不会使用代理。";
+        }
+        else if (ProxyWillApply)
+        {
+            ProxyStatusText = "代理：将使用";
+            ProxyStatusDetail = $"本次下载将通过 {proxyUrl} 访问网络。";
+        }
+        else
+        {
+            ProxyStatusText = "代理：不使用";
+            ProxyStatusDetail = $"当前链接不在代理规则范围内，本次将直连（代理配置 {proxyUrl}）。";
+        }
+
+        OnPropertyChanged(nameof(ProxyStatusBrush));
+    }
 
     /// <summary>Number of fragments downloaded concurrently (1-64).</summary>
     public int DownloadThreads
@@ -675,7 +741,7 @@ public sealed class DownloadViewModel : ObservableObject
         try
         {
             var url = Url.Trim();
-            var info = await _cli.GetMediaInfoAsync(url, CookieArgument, _cts.Token);
+            var info = await _cli.GetMediaInfoAsync(url, CookieArgument, ProxyArgument, _cts.Token);
 
             ClearParseResult();
             VideoTitle = info.Title;
@@ -738,7 +804,7 @@ public sealed class DownloadViewModel : ObservableObject
         {
             var progress = new Progress<DownloadUpdate>(ApplyUpdate);
             var outcome = await _cli.DownloadAsync(
-                Url.Trim(), expression, directory, CookieArgument, DownloadThreads, BuildOutputTemplate(), progress, _cts.Token);
+                Url.Trim(), expression, directory, CookieArgument, ProxyArgument, DownloadThreads, BuildOutputTemplate(), progress, _cts.Token);
 
             if (outcome.Cancelled)
             {
@@ -813,6 +879,8 @@ public sealed class DownloadViewModel : ObservableObject
         var folder = _settings.Settings.CookieFolder ?? string.Empty;
         if (!string.Equals(folder, _cookieFolder, StringComparison.OrdinalIgnoreCase))
             RefreshCookieOptions();
+
+        RefreshProxyStatus();
     }
 
     /// <summary>Rebuilds the cookie dropdown from the configured folder and restores the selection.</summary>
@@ -903,6 +971,13 @@ public sealed class DownloadViewModel : ObservableObject
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var downloads = Path.Combine(profile, "Downloads");
         return Directory.Exists(downloads) ? downloads : profile;
+    }
+
+    private static System.Windows.Media.Brush CreateFrozenBrush(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
     }
 
     private sealed class Win32Window : System.Windows.Forms.IWin32Window

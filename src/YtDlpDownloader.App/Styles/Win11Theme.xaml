@@ -662,4 +662,72 @@
         </Setter>
     </Style>
 
-</ResourceDictionary>
+<!-- ===================== Toggle switch ===================== -->
+    <Style x:Key="AppSwitch" TargetType="ToggleButton">
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid Background="Transparent">
+                        <Border x:Name="Track"
+                                CornerRadius="11"
+                                Background="{StaticResource ControlBorderBrush}"
+                                BorderBrush="{StaticResource ControlBorderBrush}"
+                                BorderThickness="1" />
+                        <Ellipse x:Name="Knob"
+                                 Width="16"
+                                 Height="16"
+                                 Fill="White"
+                                 HorizontalAlignment="Left"
+                                 VerticalAlignment="Center"
+                                 Margin="3,0,0,0">
+                            <Ellipse.RenderTransform>
+                                <TranslateTransform x:Name="KnobTransform" X="0" />
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="{StaticResource AccentBrush}" />
+                            <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="KnobTransform"
+                                                         Storyboard.TargetProperty="X"
+                                                         To="22" Duration="0:0:0.18">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="KnobTransform"
+                                                         Storyboard.TargetProperty="X"
+                                                         To="0" Duration="0:0:0.18">
+                                            <DoubleAnimation.EasingFunction>
+                                                <CubicEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Track" Property="Opacity" Value="0.5" />
+                            <Setter TargetName="Knob" Property="Opacity" Value="0.7" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    </ResourceDictionary>

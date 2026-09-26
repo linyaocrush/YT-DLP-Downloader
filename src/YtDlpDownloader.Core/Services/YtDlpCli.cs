@@ -18,6 +18,7 @@ public interface IYtDlpCli
     Task<MediaInfo> GetMediaInfoAsync(
         string url,
         string? cookieFile = null,
+        string? proxyUrl = null,
         CancellationToken cancellationToken = default);
 
     Task<DownloadOutcome> DownloadAsync(
@@ -25,6 +26,7 @@ public interface IYtDlpCli
         string formatExpression,
         string outputDirectory,
         string? cookieFile = null,
+        string? proxyUrl = null,
         int concurrentFragments = 1,
         string? outputTemplate = null,
         IProgress<DownloadUpdate>? progress = null,
@@ -91,12 +93,14 @@ public sealed class YtDlpCli : IYtDlpCli
     public async Task<MediaInfo> GetMediaInfoAsync(
         string url,
         string? cookieFile = null,
+        string? proxyUrl = null,
         CancellationToken cancellationToken = default)
     {
         var exe = _paths.Resolve() ?? throw new YtDlpException(NotConfiguredMessage);
 
         var args = new List<string> { "--encoding", "utf-8", "--skip-download", "--no-playlist", "--no-warnings", "--dump-single-json" };
         AddCookieArguments(args, cookieFile);
+        AddProxyArguments(args, proxyUrl);
         args.Add(url);
 
         var result = await _runner.RunAsync(exe, args, cancellationToken: cancellationToken);
@@ -122,6 +126,7 @@ public sealed class YtDlpCli : IYtDlpCli
         string formatExpression,
         string outputDirectory,
         string? cookieFile = null,
+        string? proxyUrl = null,
         int concurrentFragments = 1,
         string? outputTemplate = null,
         IProgress<DownloadUpdate>? progress = null,
@@ -154,6 +159,7 @@ public sealed class YtDlpCli : IYtDlpCli
             "-o", template,
         };
         AddCookieArguments(args, cookieFile);
+        AddProxyArguments(args, proxyUrl);
 
         // Only pass an explicit location when ffmpeg is not already on PATH (yt-dlp finds it there).
         if (_ffmpegPaths.GetExplicitPathForYtDlp() is { } ffmpeg)
@@ -234,6 +240,15 @@ public sealed class YtDlpCli : IYtDlpCli
 
         args.Add("--cookies");
         args.Add(cookieFile.Trim());
+    }
+
+    private static void AddProxyArguments(ICollection<string> args, string? proxyUrl)
+    {
+        if (string.IsNullOrWhiteSpace(proxyUrl))
+            return;
+
+        args.Add("--proxy");
+        args.Add(proxyUrl.Trim());
     }
 
     private static string LastMeaningful(string stderr, string stdout)
