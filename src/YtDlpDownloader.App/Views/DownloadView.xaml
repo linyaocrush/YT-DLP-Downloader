@@ -190,7 +190,7 @@
                                Margin="0,0,12,0"
                                Foreground="{StaticResource TextSecondaryBrush}" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <RadioButton Content="自动选择（最高画质 / 音质并合成）"
+                        <RadioButton Content="自动选择"
                                      Margin="0,0,20,0"
                                      GroupName="DownloadMode"
                                      IsChecked="{Binding IsAutoMode}" />
