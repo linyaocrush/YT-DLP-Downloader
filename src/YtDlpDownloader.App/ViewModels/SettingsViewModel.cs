@@ -19,6 +19,10 @@ public sealed class SettingsViewModel : ObservableObject
         new ProxyProtocolOption(ProxyProtocol.Https, "https"),
         new ProxyProtocolOption(ProxyProtocol.Socks5, "socks5"),
     };
+    /// <summary>Official download pages offered when a required tool is missing.</summary>
+    public const string YtDlpDownloadUrl = "https://github.com/yt-dlp/yt-dlp/releases";
+    public const string FfmpegDownloadUrl = "https://ffmpeg.org/download.html";
+
     private readonly ISettingsService _settings;
     private readonly IYtDlpPathService _paths;
     private readonly IFfmpegPathService _ffmpegPaths;
@@ -29,6 +33,8 @@ public sealed class SettingsViewModel : ObservableObject
     private string _ffmpegPath;
     private string _ffmpegStatus = string.Empty;
     private bool _showFfmpegManualControls;
+    private bool _showYtDlpDownloadHint;
+    private bool _showFfmpegDownloadHint;
     private string _cookieFolder;
     private string _cookieFolderStatus = string.Empty;
 
@@ -80,6 +86,8 @@ public sealed class SettingsViewModel : ObservableObject
 
         BrowseCommand = new RelayCommand(Browse);
         RescanCommand = new RelayCommand(Rescan);
+        OpenYtDlpDownloadCommand = new RelayCommand(() => OpenUrl(YtDlpDownloadUrl));
+        OpenFfmpegDownloadCommand = new RelayCommand(() => OpenUrl(FfmpegDownloadUrl));
         BrowseFfmpegCommand = new RelayCommand(BrowseFfmpeg);
         ClearFfmpegCommand = new RelayCommand(
             () => FfmpegPath = string.Empty,
@@ -99,6 +107,8 @@ public sealed class SettingsViewModel : ObservableObject
 
     public RelayCommand BrowseCommand { get; }
     public RelayCommand RescanCommand { get; }
+    public RelayCommand OpenYtDlpDownloadCommand { get; }
+    public RelayCommand OpenFfmpegDownloadCommand { get; }
     public RelayCommand BrowseFfmpegCommand { get; }
     public RelayCommand ClearFfmpegCommand { get; }
     public RelayCommand BrowseCookieFolderCommand { get; }
@@ -151,6 +161,20 @@ public sealed class SettingsViewModel : ObservableObject
     {
         get => _showFfmpegManualControls;
         private set => SetProperty(ref _showFfmpegManualControls, value);
+    }
+
+    /// <summary>True when yt-dlp could not be located, so the download hint should be shown.</summary>
+    public bool ShowYtDlpDownloadHint
+    {
+        get => _showYtDlpDownloadHint;
+        private set => SetProperty(ref _showYtDlpDownloadHint, value);
+    }
+
+    /// <summary>True when no usable ffmpeg was found, so the download hint should be shown.</summary>
+    public bool ShowFfmpegDownloadHint
+    {
+        get => _showFfmpegDownloadHint;
+        private set => SetProperty(ref _showFfmpegDownloadHint, value);
     }
 
     /// <summary>Folder scanned for cookie files. Empty means cookies are not used.</summary>
@@ -362,10 +386,12 @@ public sealed class SettingsViewModel : ObservableObject
 
         if (located is not null)
         {
+            ShowFfmpegDownloadHint = false;
             FfmpegStatus = $"已在系统 PATH 中检测到 ffmpeg：{located}（无需手动配置）";
             return;
         }
 
+        ShowFfmpegDownloadHint = _ffmpegPaths.GetConfiguredPath() is null;
         FfmpegStatus = !string.IsNullOrWhiteSpace(_ffmpegPath)
             ? File.Exists(_ffmpegPath)
                 ? $"已配置 ffmpeg：{_ffmpegPath}"
@@ -425,6 +451,22 @@ public sealed class SettingsViewModel : ObservableObject
         RefreshFfmpegStatus();
     }
 
+    /// <summary>Opens a URL in the user's default browser.</summary>
+    private static void OpenUrl(string url)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch
+        {
+            // Ignore failures opening the browser.
+        }
+    }
+
     private void BrowseFfmpeg()
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
@@ -475,11 +517,14 @@ public sealed class SettingsViewModel : ObservableObject
             string? resolved = _paths.Resolve();
             if (resolved is null)
             {
+                ShowYtDlpDownloadHint = true;
                 StatusText = string.IsNullOrWhiteSpace(YtDlpPath)
                     ? "未在 PATH 中找到 yt-dlp。请点击“浏览…”选择 yt-dlp.exe，或直接输入完整路径。"
                     : "未检测到可用的 yt-dlp，请检查路径是否正确。";
                 return;
             }
+
+            ShowYtDlpDownloadHint = false;
 
             // Reflect a PATH-found executable back into the field when nothing valid was configured.
             if (!string.Equals(resolved, YtDlpPath, StringComparison.OrdinalIgnoreCase))

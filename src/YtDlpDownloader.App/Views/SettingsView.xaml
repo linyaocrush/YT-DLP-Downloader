@@ -179,6 +179,12 @@
                                 Command="{Binding RescanCommand}" />
                     </Grid>
 
+                    <Button Margin="0,8,0,0"
+                            Style="{StaticResource LinkButton}"
+                            Content="未找到 yt-dlp？点击前往官方下载页面"
+                            Command="{Binding OpenYtDlpDownloadCommand}"
+                            Visibility="{Binding ShowYtDlpDownloadHint, Converter={StaticResource BoolToVis}}" />
+
                     <Border Margin="0,14,0,0"
                             Padding="12,10"
                             CornerRadius="6"
@@ -219,6 +225,12 @@
                                 Margin="8,0,0,0"
                                 Command="{Binding ClearFfmpegCommand}" />
                     </Grid>
+
+                    <Button Margin="0,8,0,0"
+                            Style="{StaticResource LinkButton}"
+                            Content="未找到 ffmpeg？点击前往官方下载页面"
+                            Command="{Binding OpenFfmpegDownloadCommand}"
+                            Visibility="{Binding ShowFfmpegDownloadHint, Converter={StaticResource BoolToVis}}" />
 
                     <Border Margin="0,14,0,0"
                             Padding="12,10"
