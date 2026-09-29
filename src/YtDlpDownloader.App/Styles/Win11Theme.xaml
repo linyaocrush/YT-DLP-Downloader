@@ -25,6 +25,9 @@
     <SolidColorBrush x:Key="PlaceholderBrush" Color="#EDEDED" />
     <SolidColorBrush x:Key="ScrollThumbBrush" Color="#40000000" />
     <SolidColorBrush x:Key="ScrollThumbHoverBrush" Color="#73000000" />
+    <SolidColorBrush x:Key="EnvReadyBrush" Color="#2FB344" />
+    <SolidColorBrush x:Key="EnvPartialBrush" Color="#E8A33D" />
+    <SolidColorBrush x:Key="EnvMissingBrush" Color="#E5484D" />
 
     <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Microsoft YaHei</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Courier New</FontFamily>

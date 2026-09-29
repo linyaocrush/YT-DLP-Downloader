@@ -35,6 +35,12 @@ public sealed class SettingsViewModel : ObservableObject
     private bool _showFfmpegManualControls;
     private bool _showYtDlpDownloadHint;
     private bool _showFfmpegDownloadHint;
+    private bool _ytDlpReady;
+    private bool _ffmpegReady;
+    private bool _isEnvironmentReady;
+    private bool _isEnvironmentPartial;
+    private bool _isEnvironmentMissing;
+    private string _environmentStatusText = string.Empty;
     private string _cookieFolder;
     private string _cookieFolderStatus = string.Empty;
 
@@ -175,6 +181,34 @@ public sealed class SettingsViewModel : ObservableObject
     {
         get => _showFfmpegDownloadHint;
         private set => SetProperty(ref _showFfmpegDownloadHint, value);
+    }
+
+    /// <summary>True when both yt-dlp and ffmpeg are available (green indicator).</summary>
+    public bool IsEnvironmentReady
+    {
+        get => _isEnvironmentReady;
+        private set => SetProperty(ref _isEnvironmentReady, value);
+    }
+
+    /// <summary>True when only one of yt-dlp / ffmpeg is available (yellow indicator).</summary>
+    public bool IsEnvironmentPartial
+    {
+        get => _isEnvironmentPartial;
+        private set => SetProperty(ref _isEnvironmentPartial, value);
+    }
+
+    /// <summary>True when neither yt-dlp nor ffmpeg is available (red indicator).</summary>
+    public bool IsEnvironmentMissing
+    {
+        get => _isEnvironmentMissing;
+        private set => SetProperty(ref _isEnvironmentMissing, value);
+    }
+
+    /// <summary>Human-readable summary of the combined environment health.</summary>
+    public string EnvironmentStatusText
+    {
+        get => _environmentStatusText;
+        private set => SetProperty(ref _environmentStatusText, value);
     }
 
     /// <summary>Folder scanned for cookie files. Empty means cookies are not used.</summary>
@@ -387,16 +421,39 @@ public sealed class SettingsViewModel : ObservableObject
         if (located is not null)
         {
             ShowFfmpegDownloadHint = false;
+            _ffmpegReady = true;
             FfmpegStatus = $"已在系统 PATH 中检测到 ffmpeg：{located}（无需手动配置）";
+            RefreshEnvironmentState();
             return;
         }
 
         ShowFfmpegDownloadHint = _ffmpegPaths.GetConfiguredPath() is null;
+        _ffmpegReady = File.Exists(_ffmpegPath);
         FfmpegStatus = !string.IsNullOrWhiteSpace(_ffmpegPath)
             ? File.Exists(_ffmpegPath)
                 ? $"已配置 ffmpeg：{_ffmpegPath}"
                 : "指定的 ffmpeg 路径不存在，请重新选择。"
             : "未在系统 PATH 中检测到 ffmpeg。合成音视频需要它，请点击“浏览…”手动指定 ffmpeg.exe 的路径。";
+        RefreshEnvironmentState();
+    }
+
+    /// <summary>Recomputes the combined yt-dlp + ffmpeg health shown by the indicator light.</summary>
+    private void RefreshEnvironmentState()
+    {
+        bool ytReady = _ytDlpReady;
+        bool ffReady = _ffmpegReady;
+
+        IsEnvironmentReady = ytReady && ffReady;
+        IsEnvironmentPartial = ytReady != ffReady;
+        IsEnvironmentMissing = !ytReady && !ffReady;
+
+        EnvironmentStatusText = (ytReady, ffReady) switch
+        {
+            (true, true) => "运行环境正常：已检测到 yt-dlp 与 ffmpeg。",
+            (true, false) => "部分就绪：已检测到 yt-dlp，但缺少可用的 ffmpeg。",
+            (false, true) => "部分就绪：已检测到 ffmpeg，但缺少可用的 yt-dlp。",
+            _ => "环境未就绪：未检测到可用的 yt-dlp 与 ffmpeg。",
+        };
     }
 
     private void RefreshCookieFolderStatus()
@@ -518,9 +575,11 @@ public sealed class SettingsViewModel : ObservableObject
             if (resolved is null)
             {
                 ShowYtDlpDownloadHint = true;
+                _ytDlpReady = false;
                 StatusText = string.IsNullOrWhiteSpace(YtDlpPath)
                     ? "未在 PATH 中找到 yt-dlp。请点击“浏览…”选择 yt-dlp.exe，或直接输入完整路径。"
                     : "未检测到可用的 yt-dlp，请检查路径是否正确。";
+                RefreshEnvironmentState();
                 return;
             }
 
@@ -534,9 +593,11 @@ public sealed class SettingsViewModel : ObservableObject
             }
 
             var version = await _cli.GetVersionAsync();
+            _ytDlpReady = version is not null;
             StatusText = version is null
                 ? $"无法运行该程序，请确认它是有效的 yt-dlp：{resolved}"
                 : $"已就绪 — yt-dlp {version}";
+            RefreshEnvironmentState();
         }
         catch (OperationCanceledException)
         {
@@ -544,7 +605,9 @@ public sealed class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            _ytDlpReady = false;
             StatusText = $"检测失败：{ex.Message}";
+            RefreshEnvironmentState();
         }
     }
 }

@@ -1,6 +1,19 @@
 <UserControl x:Class="YtDlpDownloader.App.Views.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <Style x:Key="EnvironmentIndicatorStyle" TargetType="Ellipse">
+            <Setter Property="Fill" Value="{StaticResource EnvMissingBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsEnvironmentPartial}" Value="True">
+                    <Setter Property="Fill" Value="{StaticResource EnvPartialBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsEnvironmentReady}" Value="True">
+                    <Setter Property="Fill" Value="{StaticResource EnvReadyBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel>
@@ -180,13 +193,33 @@
 
             <Border Style="{StaticResource Card}" Margin="0,16,0,0">
                 <StackPanel>
-                    <TextBlock Text="环境检测"
-                               FontSize="15"
-                               FontWeight="SemiBold" />
-                    <TextBlock Text="本工具依赖本机的 yt-dlp 与 ffmpeg，不会内置或自动下载。程序启动时会先从系统 PATH 中自动查找，未找到时可在此手动指定。"
-                               Margin="0,4,0,0"
-                               TextWrapping="Wrap"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="环境检测"
+                                       FontSize="15"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="本工具依赖本机的 yt-dlp 与 ffmpeg，不会内置或自动下载。程序启动时会先从系统 PATH 中自动查找，未找到时可在此手动指定。"
+                                       Margin="0,4,0,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                        </StackPanel>
+                        <Grid Grid.Column="1"
+                              VerticalAlignment="Top"
+                              Margin="12,2,0,0"
+                              ToolTip="{Binding EnvironmentStatusText}">
+                            <Ellipse Width="20"
+                                     Height="20"
+                                     Opacity="0.18"
+                                     Style="{StaticResource EnvironmentIndicatorStyle}" />
+                            <Ellipse Width="11"
+                                     Height="11"
+                                     Style="{StaticResource EnvironmentIndicatorStyle}" />
+                        </Grid>
+                    </Grid>
 
                     <Border Margin="0,14,0,0"
                             Padding="14,12"
