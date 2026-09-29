@@ -1,4 +1,5 @@
 using System.Windows;
+using YtDlpDownloader.App.Services;
 using YtDlpDownloader.App.Theming;
 using YtDlpDownloader.App.ViewModels;
 using YtDlpDownloader.App.Views;
@@ -11,6 +12,8 @@ public partial class App : Application
     private ISettingsService? _settings;
     private IYtDlpCli? _cli;
     private DownloadViewModel? _download;
+    private TaskbarProgressBinder? _taskbarBinder;
+    private DownloadNotifier? _notifier;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -43,10 +46,15 @@ public partial class App : Application
         MainWindow = mainWindow;
         mainWindow.Show();
         ThemeManager.ApplyWindowChrome(mainWindow);
+
+        _taskbarBinder = new TaskbarProgressBinder(mainWindow, downloadViewModel);
+        _notifier = new DownloadNotifier(mainWindow, downloadViewModel);
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _notifier?.Dispose();
+        _taskbarBinder?.Dispose();
         _download?.Cleanup();
         base.OnExit(e);
     }

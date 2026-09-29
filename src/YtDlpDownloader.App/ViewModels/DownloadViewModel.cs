@@ -163,6 +163,9 @@ public sealed class DownloadViewModel : ObservableObject
     public RelayCommand BrowseFolderCommand { get; }
     public RelayCommand RefreshCookiesCommand { get; }
 
+    /// <summary>Raised once per download attempt, after the download finishes or fails.</summary>
+    public event EventHandler<DownloadFinishedEventArgs>? DownloadFinished;
+
     public string Url
     {
         get => _url;
@@ -800,6 +803,11 @@ public sealed class DownloadViewModel : ObservableObject
             }
             : $"开始下载（格式 {expression}）…";
 
+        var success = false;
+        var cancelled = false;
+        string? error = null;
+        string? outputPath = null;
+
         try
         {
             var progress = new Progress<DownloadUpdate>(ApplyUpdate);
@@ -808,26 +816,32 @@ public sealed class DownloadViewModel : ObservableObject
 
             if (outcome.Cancelled)
             {
+                cancelled = true;
                 StatusText = "下载已取消";
             }
             else if (outcome.Success)
             {
+                success = true;
+                outputPath = outcome.OutputPath;
                 StatusText = outcome.OutputPath is null
                     ? "下载完成"
                     : $"下载完成：{outcome.OutputPath}";
             }
             else
             {
-                StatusText = $"下载失败：{outcome.Error ?? "未知错误"}";
-                Logs.Add(outcome.Error ?? "未知错误");
+                error = outcome.Error ?? "未知错误";
+                StatusText = $"下载失败：{error}";
+                Logs.Add(error);
             }
         }
         catch (OperationCanceledException)
         {
+            cancelled = true;
             StatusText = "下载已取消";
         }
         catch (Exception ex)
         {
+            error = ex.Message;
             StatusText = $"下载失败：{ex.Message}";
         }
         finally
@@ -837,6 +851,10 @@ public sealed class DownloadViewModel : ObservableObject
             IsProgressVisible = false;
             SetBusy(false);
         }
+
+        DownloadFinished?.Invoke(
+            this,
+            new DownloadFinishedEventArgs(success, cancelled, error, outputPath, VideoTitle, Url.Trim()));
     }
 
     private void ApplyUpdate(DownloadUpdate update)
