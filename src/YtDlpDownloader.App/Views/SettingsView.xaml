@@ -33,212 +33,260 @@
                                       ToolTip="代理总开关" />
                     </Grid>
 
-                    <Grid Margin="0,14,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="16" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="16" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0"
-                                   Text="协议"
-                                   VerticalAlignment="Center"
-                                   Foreground="{StaticResource TextSecondaryBrush}" />
-                        <ComboBox Grid.Column="1"
-                                  Width="100"
-                                  Margin="8,0,0,0"
-                                  Style="{StaticResource AppComboBox}"
-                                  ItemsSource="{Binding ProxyProtocolOptions}"
-                                  SelectedItem="{Binding SelectedProxyProtocol}">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding Label}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock Grid.Column="3"
-                                   Text="IP / 主机"
-                                   VerticalAlignment="Center"
-                                   Foreground="{StaticResource TextSecondaryBrush}" />
-                        <TextBox Grid.Column="4"
-                                 Margin="8,0"
-                                 Text="{Binding ProxyHost, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="例如 127.0.0.1 或 proxy.example.com" />
-                        <TextBlock Grid.Column="6"
-                                   Text="端口"
-                                   VerticalAlignment="Center"
-                                   Foreground="{StaticResource TextSecondaryBrush}" />
-                        <TextBox Grid.Column="7"
-                                 Width="84"
-                                 Margin="8,0,0,0"
-                                 Text="{Binding ProxyPort, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="1-65535，例如 7890" />
-                    </Grid>
-
-                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                        <TextBlock Text="名单模式"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,12,0"
-                                   Foreground="{StaticResource TextSecondaryBrush}" />
-                        <RadioButton Content="黑名单（名单内的网站不使用代理）"
-                                     GroupName="ProxyListMode"
-                                     Margin="0,0,20,0"
-                                     IsChecked="{Binding IsBlacklistMode}" />
-                        <RadioButton Content="白名单（仅名单内的网站使用代理）"
-                                     GroupName="ProxyListMode"
-                                     IsChecked="{Binding IsWhitelistMode}" />
-                    </StackPanel>
-
-                    <Grid Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0"
-                                 Text="{Binding NewProxySite, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="例如 https://www.youtube.com/" />
-                        <Button Grid.Column="1"
-                                Content="添加网站"
-                                Margin="8,0,0,0"
-                                Command="{Binding AddProxySiteCommand}" />
-                    </Grid>
-
-                    <ItemsControl Margin="0,10,0,0"
-                                  ItemsSource="{Binding ProxySites}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="{StaticResource AccentSoftBrush}"
-                                        BorderBrush="{StaticResource AccentBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="13"
-                                        Padding="10,4"
-                                        Margin="0,0,8,8">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding}"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{StaticResource AccentPressedBrush}" />
-                                        <Button Content="✕"
-                                                Width="18"
-                                                Height="18"
-                                                Padding="0"
-                                                Margin="8,0,0,0"
-                                                Background="Transparent"
-                                                BorderThickness="0"
-                                                Foreground="{StaticResource AccentPressedBrush}"
-                                                Command="{Binding DataContext.RemoveProxySiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}"
-                                                ToolTip="移除该网站" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <TextBlock Margin="0,10,0,0"
-                               Text="{Binding ProxyStatus}"
-                               TextWrapping="Wrap"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
-                </StackPanel>
-            </Border>
-
-            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
-                <StackPanel>
-                    <TextBlock Text="yt-dlp 路径"
-                               FontSize="15"
-                               FontWeight="SemiBold" />
-                    <TextBlock Text="用于解析视频信息与下载。程序启动时会先从系统 PATH 中自动查找 yt-dlp.exe。"
-                               Margin="0,4,0,0"
-                               TextWrapping="Wrap"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
-
-                    <Grid Margin="0,14,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0"
-                                 Text="{Binding YtDlpPath, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="yt-dlp.exe 的完整路径，例如 D:\tools\yt-dlp.exe" />
-                        <Button Grid.Column="1"
-                                Content="浏览…"
-                                Margin="8,0,0,0"
-                                Command="{Binding BrowseCommand}" />
-                        <Button Grid.Column="2"
-                                Content="重新检测"
-                                Margin="8,0,0,0"
-                                Command="{Binding RescanCommand}" />
-                    </Grid>
-
-                    <Button Margin="0,8,0,0"
-                            Style="{StaticResource LinkButton}"
-                            Content="未找到 yt-dlp？点击前往官方下载页面"
-                            Command="{Binding OpenYtDlpDownloadCommand}"
-                            Visibility="{Binding ShowYtDlpDownloadHint, Converter={StaticResource BoolToVis}}" />
-
                     <Border Margin="0,14,0,0"
-                            Padding="12,10"
+                            Padding="14,12"
                             CornerRadius="6"
-                            Background="{StaticResource AccentSoftBrush}">
-                        <TextBlock Text="{Binding StatusText}"
-                                   TextWrapping="Wrap"
-                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                            BorderBrush="{StaticResource DividerBrush}"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="代理服务器"
+                                       FontSize="14"
+                                       FontWeight="SemiBold" />
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="16" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="16" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="协议"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                <ComboBox Grid.Column="1"
+                                          Width="100"
+                                          Margin="8,0,0,0"
+                                          Style="{StaticResource AppComboBox}"
+                                          ItemsSource="{Binding ProxyProtocolOptions}"
+                                          SelectedItem="{Binding SelectedProxyProtocol}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Grid.Column="3"
+                                           Text="IP / 主机"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                <TextBox Grid.Column="4"
+                                         Margin="8,0"
+                                         Text="{Binding ProxyHost, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="例如 127.0.0.1 或 proxy.example.com" />
+                                <TextBlock Grid.Column="6"
+                                           Text="端口"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                <TextBox Grid.Column="7"
+                                         Width="84"
+                                         Margin="8,0,0,0"
+                                         Text="{Binding ProxyPort, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="1-65535，例如 7890" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="0,12,0,0"
+                            Padding="14,12"
+                            CornerRadius="6"
+                            BorderBrush="{StaticResource DividerBrush}"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="名单规则"
+                                       FontSize="14"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="选择黑名单或白名单模式，并维护对应的网站名单。"
+                                       Margin="0,2,0,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondaryBrush}" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <TextBlock Text="名单模式"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,12,0"
+                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                <RadioButton Content="黑名单（名单内的网站不使用代理）"
+                                             GroupName="ProxyListMode"
+                                             Margin="0,0,20,0"
+                                             IsChecked="{Binding IsBlacklistMode}" />
+                                <RadioButton Content="白名单（仅名单内的网站使用代理）"
+                                             GroupName="ProxyListMode"
+                                             IsChecked="{Binding IsWhitelistMode}" />
+                            </StackPanel>
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding NewProxySite, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="例如 https://www.youtube.com/" />
+                                <Button Grid.Column="1"
+                                        Content="添加网站"
+                                        Margin="8,0,0,0"
+                                        Command="{Binding AddProxySiteCommand}" />
+                            </Grid>
+
+                            <ItemsControl Margin="0,10,0,0"
+                                          ItemsSource="{Binding ProxySites}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource AccentSoftBrush}"
+                                                BorderBrush="{StaticResource AccentBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="13"
+                                                Padding="10,4"
+                                                Margin="0,0,8,8">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding}"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{StaticResource AccentPressedBrush}" />
+                                                <Button Content="✕"
+                                                        Width="18"
+                                                        Height="18"
+                                                        Padding="0"
+                                                        Margin="8,0,0,0"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Foreground="{StaticResource AccentPressedBrush}"
+                                                        Command="{Binding DataContext.RemoveProxySiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip="移除该网站" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Margin="0,10,0,0"
+                                       Text="{Binding ProxyStatus}"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </Border>
 
             <Border Style="{StaticResource Card}" Margin="0,16,0,0">
                 <StackPanel>
-                    <TextBlock Text="ffmpeg 路径"
+                    <TextBlock Text="环境检测"
                                FontSize="15"
                                FontWeight="SemiBold" />
-                    <TextBlock Text="合成音视频、转换格式时需要 ffmpeg。程序会优先从系统 PATH 中自动查找 ffmpeg.exe；未找到时可在此手动指定。"
+                    <TextBlock Text="本工具依赖本机的 yt-dlp 与 ffmpeg，不会内置或自动下载。程序启动时会先从系统 PATH 中自动查找，未找到时可在此手动指定。"
                                Margin="0,4,0,0"
                                TextWrapping="Wrap"
                                Foreground="{StaticResource TextSecondaryBrush}" />
 
-                    <Grid Margin="0,14,0,0"
-                          Visibility="{Binding ShowFfmpegManualControls, Converter={StaticResource BoolToVis}}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0"
-                                 Text="{Binding FfmpegPath, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="ffmpeg.exe 的完整路径，例如 D:\tools\ffmpeg.exe" />
-                        <Button Grid.Column="1"
-                                Content="浏览…"
-                                Margin="8,0,0,0"
-                                Command="{Binding BrowseFfmpegCommand}" />
-                        <Button Grid.Column="2"
-                                Content="清除"
-                                Margin="8,0,0,0"
-                                Command="{Binding ClearFfmpegCommand}" />
-                    </Grid>
-
-                    <Button Margin="0,8,0,0"
-                            Style="{StaticResource LinkButton}"
-                            Content="未找到 ffmpeg？点击前往官方下载页面"
-                            Command="{Binding OpenFfmpegDownloadCommand}"
-                            Visibility="{Binding ShowFfmpegDownloadHint, Converter={StaticResource BoolToVis}}" />
-
                     <Border Margin="0,14,0,0"
-                            Padding="12,10"
+                            Padding="14,12"
                             CornerRadius="6"
-                            Background="{StaticResource AccentSoftBrush}">
-                        <TextBlock Text="{Binding FfmpegStatus}"
-                                   TextWrapping="Wrap"
-                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                            BorderBrush="{StaticResource DividerBrush}"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="yt-dlp"
+                                       FontSize="14"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="用于解析视频信息与下载。"
+                                       Margin="0,2,0,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondaryBrush}" />
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding YtDlpPath, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="yt-dlp.exe 的完整路径，例如 D:\tools\yt-dlp.exe" />
+                                <Button Grid.Column="1"
+                                        Content="浏览…"
+                                        Margin="8,0,0,0"
+                                        Command="{Binding BrowseCommand}" />
+                                <Button Grid.Column="2"
+                                        Content="重新检测"
+                                        Margin="8,0,0,0"
+                                        Command="{Binding RescanCommand}" />
+                            </Grid>
+
+                            <Button Margin="0,8,0,0"
+                                    Style="{StaticResource LinkButton}"
+                                    Content="未找到 yt-dlp？点击前往官方下载页面"
+                                    Command="{Binding OpenYtDlpDownloadCommand}"
+                                    Visibility="{Binding ShowYtDlpDownloadHint, Converter={StaticResource BoolToVis}}" />
+
+                            <Border Margin="0,12,0,0"
+                                    Padding="12,10"
+                                    CornerRadius="6"
+                                    Background="{StaticResource AccentSoftBrush}">
+                                <TextBlock Text="{Binding StatusText}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="0,12,0,0"
+                            Padding="14,12"
+                            CornerRadius="6"
+                            BorderBrush="{StaticResource DividerBrush}"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="ffmpeg"
+                                       FontSize="14"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="合成音视频、转换格式时需要 ffmpeg。"
+                                       Margin="0,2,0,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondaryBrush}" />
+
+                            <Grid Margin="0,12,0,0"
+                                  Visibility="{Binding ShowFfmpegManualControls, Converter={StaticResource BoolToVis}}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding FfmpegPath, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="ffmpeg.exe 的完整路径，例如 D:\tools\ffmpeg.exe" />
+                                <Button Grid.Column="1"
+                                        Content="浏览…"
+                                        Margin="8,0,0,0"
+                                        Command="{Binding BrowseFfmpegCommand}" />
+                                <Button Grid.Column="2"
+                                        Content="清除"
+                                        Margin="8,0,0,0"
+                                        Command="{Binding ClearFfmpegCommand}" />
+                            </Grid>
+
+                            <Button Margin="0,8,0,0"
+                                    Style="{StaticResource LinkButton}"
+                                    Content="未找到 ffmpeg？点击前往官方下载页面"
+                                    Command="{Binding OpenFfmpegDownloadCommand}"
+                                    Visibility="{Binding ShowFfmpegDownloadHint, Converter={StaticResource BoolToVis}}" />
+
+                            <Border Margin="0,12,0,0"
+                                    Padding="12,10"
+                                    CornerRadius="6"
+                                    Background="{StaticResource AccentSoftBrush}">
+                                <TextBlock Text="{Binding FfmpegStatus}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                            </Border>
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </Border>
