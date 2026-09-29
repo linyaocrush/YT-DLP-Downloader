@@ -4,13 +4,13 @@
         xmlns:views="clr-namespace:YtDlpDownloader.App.Views"
         Title="{Binding WindowTitle}"
         Height="780" Width="1160"
-        MinHeight="660" MinWidth="940"
+        MinHeight="520" MinWidth="720"
         Background="{StaticResource WindowBackgroundBrush}"
         FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         WindowStartupLocation="CenterScreen">
-    <TabControl Margin="18,10,18,18">
+    <TabControl x:Name="RootTabs" Margin="18,10,18,18">
         <TabItem Header="下载">
             <views:DownloadView DataContext="{Binding Download}" />
         </TabItem>
