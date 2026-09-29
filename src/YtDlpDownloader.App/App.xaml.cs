@@ -1,4 +1,5 @@
 using System.Windows;
+using YtDlpDownloader.App.Theming;
 using YtDlpDownloader.App.ViewModels;
 using YtDlpDownloader.App.Views;
 using YtDlpDownloader.Core.Services;
@@ -17,6 +18,8 @@ public partial class App : Application
 
         // ---- Composition root (plain DI, no external packages) ----
         var settingsService = new SettingsService(AppContext.BaseDirectory);
+        ThemeManager.Apply(settingsService.Settings.Theme);
+
         var pathService = new YtDlpPathService(settingsService);
         var ffmpegPathService = new FfmpegPathService(settingsService);
         var runner = new ProcessRunner();
@@ -27,6 +30,7 @@ public partial class App : Application
         var downloadViewModel = new DownloadViewModel(settingsService, cli);
 
         settingsService.Changed += (_, _) => downloadViewModel.RefreshYtDlpStatus();
+        settingsService.Changed += (_, _) => ThemeManager.Apply(settingsService.Settings.Theme);
 
         _settings = settingsService;
         _cli = cli;
@@ -38,6 +42,7 @@ public partial class App : Application
         };
         MainWindow = mainWindow;
         mainWindow.Show();
+        ThemeManager.ApplyWindowChrome(mainWindow);
     }
 
     protected override void OnExit(ExitEventArgs e)

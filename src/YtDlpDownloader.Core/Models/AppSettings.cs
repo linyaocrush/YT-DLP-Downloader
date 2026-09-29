@@ -51,6 +51,9 @@ public sealed class AppSettings
 
     /// <summary>Websites the proxy rule applies to (host names or URL prefixes).</summary>
     public List<string> ProxySites { get; set; } = new();
+
+    /// <summary>Light/dark appearance; <see cref="AppTheme.System"/> follows the OS setting.</summary>
+    public AppTheme Theme { get; set; } = AppTheme.System;
 }
 
 /// <summary>Preferred video resolution used when yt-dlp picks the format automatically.</summary>
@@ -122,4 +125,17 @@ public enum ProxyListMode
 
     /// <summary>All websites except the listed ones use the proxy.</summary>
     Blacklist,
+}
+
+/// <summary>Application colour scheme selection.</summary>
+public enum AppTheme
+{
+    /// <summary>Use the light palette.</summary>
+    Light,
+
+    /// <summary>Use the dark palette.</summary>
+    Dark,
+
+    /// <summary>Follow the Windows light/dark app setting.</summary>
+    System,
 }

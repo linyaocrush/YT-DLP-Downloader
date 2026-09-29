@@ -5,7 +5,7 @@
         Title="{Binding WindowTitle}"
         Height="780" Width="1160"
         MinHeight="520" MinWidth="720"
-        Background="{StaticResource WindowBackgroundBrush}"
+        Background="{DynamicResource WindowBackgroundBrush}"
         FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"

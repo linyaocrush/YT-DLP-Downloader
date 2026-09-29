@@ -10,6 +10,9 @@ namespace YtDlpDownloader.App.ViewModels;
 /// <summary>A selectable proxy protocol and its display prefix.</summary>
 public sealed record ProxyProtocolOption(ProxyProtocol Value, string Label);
 
+/// <summary>A selectable colour scheme and its display label.</summary>
+public sealed record ThemeOption(AppTheme Value, string Label);
+
 public sealed class SettingsViewModel : ObservableObject
 {
     /// <summary>Protocol choices offered in the proxy card.</summary>
@@ -18,6 +21,13 @@ public sealed class SettingsViewModel : ObservableObject
         new ProxyProtocolOption(ProxyProtocol.Http, "http"),
         new ProxyProtocolOption(ProxyProtocol.Https, "https"),
         new ProxyProtocolOption(ProxyProtocol.Socks5, "socks5"),
+    };
+    /// <summary>Colour schemes offered in the appearance card.</summary>
+    public static readonly IReadOnlyList<ThemeOption> ThemeCatalog = new[]
+    {
+        new ThemeOption(AppTheme.System, "跟随系统"),
+        new ThemeOption(AppTheme.Light, "浅色"),
+        new ThemeOption(AppTheme.Dark, "深色"),
     };
     /// <summary>Official download pages offered when a required tool is missing.</summary>
     public const string YtDlpDownloadUrl = "https://github.com/yt-dlp/yt-dlp/releases";
@@ -43,6 +53,7 @@ public sealed class SettingsViewModel : ObservableObject
     private string _environmentStatusText = string.Empty;
     private string _cookieFolder;
     private string _cookieFolderStatus = string.Empty;
+    private ThemeOption _selectedTheme;
 
     private bool _proxyEnabled;
     private ProxyProtocolOption _selectedProxyProtocol;
@@ -77,6 +88,9 @@ public sealed class SettingsViewModel : ObservableObject
 
         _ffmpegPath = settings.Settings.FfmpegPath ?? string.Empty;
         _cookieFolder = settings.Settings.CookieFolder ?? string.Empty;
+
+        _selectedTheme = ThemeCatalog.FirstOrDefault(
+            option => option.Value == settings.Settings.Theme) ?? ThemeCatalog[0];
 
         _proxyEnabled = settings.Settings.ProxyEnabled;
         _proxyHost = settings.Settings.ProxyHost ?? string.Empty;
@@ -233,6 +247,24 @@ public sealed class SettingsViewModel : ObservableObject
     {
         get => _cookieFolderStatus;
         private set => SetProperty(ref _cookieFolderStatus, value);
+    }
+
+    /// <summary>Colour schemes offered in the appearance card.</summary>
+    public IReadOnlyList<ThemeOption> ThemeOptions => ThemeCatalog;
+
+    /// <summary>Selected colour scheme. Saving triggers ThemeManager via ISettingsService.Changed.</summary>
+    public ThemeOption SelectedTheme
+    {
+        get => _selectedTheme;
+        set
+        {
+            if (value is null || ReferenceEquals(_selectedTheme, value))
+                return;
+
+            SetProperty(ref _selectedTheme, value);
+            _settings.Settings.Theme = value.Value;
+            _settings.Save();
+        }
     }
 
     /// <summary>Master switch: when off the proxy is never added to any command.</summary>

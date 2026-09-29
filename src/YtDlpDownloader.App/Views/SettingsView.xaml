@@ -3,13 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <UserControl.Resources>
         <Style x:Key="EnvironmentIndicatorStyle" TargetType="Ellipse">
-            <Setter Property="Fill" Value="{StaticResource EnvMissingBrush}" />
+            <Setter Property="Fill" Value="{DynamicResource EnvMissingBrush}" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsEnvironmentPartial}" Value="True">
-                    <Setter Property="Fill" Value="{StaticResource EnvPartialBrush}" />
+                    <Setter Property="Fill" Value="{DynamicResource EnvPartialBrush}" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsEnvironmentReady}" Value="True">
-                    <Setter Property="Fill" Value="{StaticResource EnvReadyBrush}" />
+                    <Setter Property="Fill" Value="{DynamicResource EnvReadyBrush}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -30,13 +30,46 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
+                            <TextBlock Text="外观"
+                                       FontSize="15"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="选择浅色或深色主题，也可以跟随 Windows 系统设置自动切换。"
+                                       Margin="0,4,0,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1"
+                                  Width="140"
+                                  VerticalAlignment="Top"
+                                  Margin="12,2,0,0"
+                                  Style="{StaticResource AppComboBox}"
+                                  ItemsSource="{Binding ThemeOptions}"
+                                  SelectedItem="{Binding SelectedTheme}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
                             <TextBlock Text="网络代理"
                                        FontSize="15"
                                        FontWeight="SemiBold" />
                             <TextBlock Text="开启后，下载与解析会按名单规则自动为 yt-dlp 添加 --proxy 参数。总开关关闭时永远不添加。"
                                        Margin="0,4,0,0"
                                        TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
                         </StackPanel>
                         <ToggleButton Grid.Column="1"
                                       Style="{StaticResource AppSwitch}"
@@ -49,7 +82,7 @@
                     <Border Margin="0,14,0,0"
                             Padding="14,12"
                             CornerRadius="6"
-                            BorderBrush="{StaticResource DividerBrush}"
+                            BorderBrush="{DynamicResource DividerBrush}"
                             BorderThickness="1">
                         <StackPanel>
                             <TextBlock Text="代理服务器"
@@ -70,7 +103,7 @@
                                 <TextBlock Grid.Column="0"
                                            Text="协议"
                                            VerticalAlignment="Center"
-                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
                                 <ComboBox Grid.Column="1"
                                           Width="100"
                                           Margin="8,0,0,0"
@@ -86,7 +119,7 @@
                                 <TextBlock Grid.Column="3"
                                            Text="IP / 主机"
                                            VerticalAlignment="Center"
-                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
                                 <TextBox Grid.Column="4"
                                          Margin="8,0"
                                          Text="{Binding ProxyHost, UpdateSourceTrigger=PropertyChanged}"
@@ -94,7 +127,7 @@
                                 <TextBlock Grid.Column="6"
                                            Text="端口"
                                            VerticalAlignment="Center"
-                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
                                 <TextBox Grid.Column="7"
                                          Width="84"
                                          Margin="8,0,0,0"
@@ -107,7 +140,7 @@
                     <Border Margin="0,12,0,0"
                             Padding="14,12"
                             CornerRadius="6"
-                            BorderBrush="{StaticResource DividerBrush}"
+                            BorderBrush="{DynamicResource DividerBrush}"
                             BorderThickness="1">
                         <StackPanel>
                             <TextBlock Text="名单规则"
@@ -116,13 +149,13 @@
                             <TextBlock Text="选择黑名单或白名单模式，并维护对应的网站名单。"
                                        Margin="0,2,0,0"
                                        TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
 
                             <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                                 <TextBlock Text="名单模式"
                                            VerticalAlignment="Center"
                                            Margin="0,0,12,0"
-                                           Foreground="{StaticResource TextSecondaryBrush}" />
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
                                 <RadioButton Content="黑名单（名单内的网站不使用代理）"
                                              GroupName="ProxyListMode"
                                              Margin="0,0,20,0"
@@ -155,8 +188,8 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Background="{StaticResource AccentSoftBrush}"
-                                                BorderBrush="{StaticResource AccentBrush}"
+                                        <Border Background="{DynamicResource AccentSoftBrush}"
+                                                BorderBrush="{DynamicResource AccentBrush}"
                                                 BorderThickness="1"
                                                 CornerRadius="13"
                                                 Padding="10,4"
@@ -164,7 +197,7 @@
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="{Binding}"
                                                            VerticalAlignment="Center"
-                                                           Foreground="{StaticResource AccentPressedBrush}" />
+                                                           Foreground="{DynamicResource AccentPressedBrush}" />
                                                 <Button Content="✕"
                                                         Width="18"
                                                         Height="18"
@@ -172,7 +205,7 @@
                                                         Margin="8,0,0,0"
                                                         Background="Transparent"
                                                         BorderThickness="0"
-                                                        Foreground="{StaticResource AccentPressedBrush}"
+                                                        Foreground="{DynamicResource AccentPressedBrush}"
                                                         Command="{Binding DataContext.RemoveProxySiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
                                                         ToolTip="移除该网站" />
@@ -185,7 +218,7 @@
                             <TextBlock Margin="0,10,0,0"
                                        Text="{Binding ProxyStatus}"
                                        TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -205,7 +238,7 @@
                             <TextBlock Text="本工具依赖本机的 yt-dlp 与 ffmpeg，不会内置或自动下载。程序启动时会先从系统 PATH 中自动查找，未找到时可在此手动指定。"
                                        Margin="0,4,0,0"
                                        TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
                         </StackPanel>
                         <Grid Grid.Column="1"
                               VerticalAlignment="Top"
@@ -224,7 +257,7 @@
                     <Border Margin="0,14,0,0"
                             Padding="14,12"
                             CornerRadius="6"
-                            BorderBrush="{StaticResource DividerBrush}"
+                            BorderBrush="{DynamicResource DividerBrush}"
                             BorderThickness="1">
                         <StackPanel>
                             <TextBlock Text="yt-dlp"
@@ -233,7 +266,7 @@
                             <TextBlock Text="用于解析视频信息与下载。"
                                        Margin="0,2,0,0"
                                        TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
 
                             <Grid Margin="0,12,0,0">
                                 <Grid.ColumnDefinitions>
@@ -263,10 +296,10 @@
                             <Border Margin="0,12,0,0"
                                     Padding="12,10"
                                     CornerRadius="6"
-                                    Background="{StaticResource AccentSoftBrush}">
+                                    Background="{DynamicResource AccentSoftBrush}">
                                 <TextBlock Text="{Binding StatusText}"
                                            TextWrapping="Wrap"
-                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                           Foreground="{DynamicResource TextPrimaryBrush}" />
                             </Border>
                         </StackPanel>
                     </Border>
@@ -274,7 +307,7 @@
                     <Border Margin="0,12,0,0"
                             Padding="14,12"
                             CornerRadius="6"
-                            BorderBrush="{StaticResource DividerBrush}"
+                            BorderBrush="{DynamicResource DividerBrush}"
                             BorderThickness="1">
                         <StackPanel>
                             <TextBlock Text="ffmpeg"
@@ -283,7 +316,7 @@
                             <TextBlock Text="合成音视频、转换格式时需要 ffmpeg。"
                                        Margin="0,2,0,0"
                                        TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
 
                             <Grid Margin="0,12,0,0"
                                   Visibility="{Binding ShowFfmpegManualControls, Converter={StaticResource BoolToVis}}">
@@ -314,10 +347,10 @@
                             <Border Margin="0,12,0,0"
                                     Padding="12,10"
                                     CornerRadius="6"
-                                    Background="{StaticResource AccentSoftBrush}">
+                                    Background="{DynamicResource AccentSoftBrush}">
                                 <TextBlock Text="{Binding FfmpegStatus}"
                                            TextWrapping="Wrap"
-                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                           Foreground="{DynamicResource TextPrimaryBrush}" />
                             </Border>
                         </StackPanel>
                     </Border>
@@ -332,7 +365,7 @@
                     <TextBlock Text="选择一个文件夹，程序会自动识别其中的所有 Cookie 文件，并在下载页以下拉列表的形式供你选择。未设置时下载页将不使用 Cookie。"
                                Margin="0,4,0,0"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
 
                     <Grid Margin="0,14,0,0">
                         <Grid.ColumnDefinitions>
@@ -356,7 +389,7 @@
                     <TextBlock Margin="0,10,0,0"
                                Text="{Binding CookieFolderStatus}"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                 </StackPanel>
             </Border>
 
@@ -367,11 +400,11 @@
                                FontWeight="SemiBold" />
                     <TextBlock Margin="0,6,0,0"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
                                Text="本工具是对本地 yt-dlp / ffmpeg 的图形化封装，不内置或下载任何外部程序。链接与音视频源均直接解析自你提供的 URL。" />
                     <TextBlock Margin="0,8,0,0"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
                                Text="Copyright © 2026 凛ふわ狐" />
                 </StackPanel>
             </Border>

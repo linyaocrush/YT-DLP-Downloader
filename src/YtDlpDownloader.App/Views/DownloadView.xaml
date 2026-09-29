@@ -35,7 +35,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="视频链接"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                     <TextBox Grid.Column="1"
                              Margin="8,0"
                              Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" />
@@ -54,7 +54,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="保存到"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                     <TextBox Grid.Column="1"
                              Margin="8,0"
                              Text="{Binding DownloadDirectory, UpdateSourceTrigger=PropertyChanged}"
@@ -73,7 +73,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="文件名"
                                    VerticalAlignment="Center"
-                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
                         <StackPanel Grid.Column="1"
                                     Orientation="Horizontal"
                                     Margin="8,0"
@@ -92,7 +92,7 @@
                     <TextBox Margin="104,8,8,0"
                              Text="{Binding OutputTemplate, Mode=OneWay}"
                              IsReadOnly="True"
-                             Background="#F7F7F7"
+                             Background="{DynamicResource PlaceholderBrush}"
                              FontFamily="{StaticResource MonoFont}"
                              FontSize="13"
                              Visibility="{Binding IsTemplateNameMode, Converter={StaticResource BoolToVis}}" />
@@ -125,7 +125,7 @@
                                Text="{Binding OutputNameHint}"
                                TextWrapping="Wrap"
                                FontSize="11"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                 </StackPanel>
 
                 <!-- cookie file (dropdown populated from the configured folder) -->
@@ -137,7 +137,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="Cookie 文件"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                     <ComboBox Grid.Column="1"
                               Margin="8,0"
                               Style="{StaticResource AppComboBox}"
@@ -164,10 +164,10 @@
                            FontSize="11">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding CookieNeedsSetup}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -188,7 +188,7 @@
                                Text="下载方式"
                                VerticalAlignment="Center"
                                Margin="0,0,12,0"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <RadioButton Content="自动选择"
                                      Margin="0,0,20,0"
@@ -205,7 +205,7 @@
                         <TextBlock Text="线程数"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"
-                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
                         <TextBox Width="56"
                                  Text="{Binding DownloadThreads, UpdateSourceTrigger=LostFocus}"
                                  ToolTip="同时下载的分片数（1-64），默认 4" />
@@ -224,7 +224,7 @@
                                Text="{Binding YtDlpStatus}"
                                VerticalAlignment="Center"
                                Margin="16,0,0,0"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                 </Grid>
 
                 <!-- download kind selector (default / video only / audio only) -->
@@ -236,12 +236,12 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="下载内容"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource TextSecondaryBrush}" />
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                     <Border Grid.Column="1"
                             Width="260"
                             HorizontalAlignment="Left"
-                            Background="{StaticResource SubtleFillBrush}"
-                            BorderBrush="{StaticResource ControlBorderBrush}"
+                            Background="{DynamicResource SubtleFillBrush}"
+                            BorderBrush="{DynamicResource ControlBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="3">
@@ -251,7 +251,7 @@
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Stretch"
                                     CornerRadius="6"
-                                    Background="{StaticResource CardBackgroundBrush}">
+                                    Background="{DynamicResource CardBackgroundBrush}">
                                 <Border.Effect>
                                     <DropShadowEffect BlurRadius="8"
                                                       ShadowDepth="1"
@@ -364,7 +364,7 @@
                         <TextBlock Text="分辨率"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"
-                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
                         <ComboBox Width="132"
                                   Style="{StaticResource AppComboBox}"
                                   ItemsSource="{Binding ResolutionOptions}"
@@ -382,7 +382,7 @@
                             Padding="10,4"
                             CornerRadius="12"
                             VerticalAlignment="Center"
-                            Background="{StaticResource SubtleFillBrush}"
+                            Background="{DynamicResource SubtleFillBrush}"
                             ToolTip="{Binding ProxyStatusDetail}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8"
@@ -427,7 +427,7 @@
                                TextWrapping="Wrap" />
                     <TextBlock Text="{Binding MetaText}"
                                Margin="0,6,0,0"
-                               Foreground="{StaticResource TextSecondaryBrush}"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
                                TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
@@ -506,7 +506,7 @@
                        Text="{Binding SelectionHint}"
                        TextWrapping="Wrap"
                        MaxWidth="360"
-                       Foreground="{StaticResource TextSecondaryBrush}"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
                        FontStyle="Italic"
                        Margin="16,0,0,0"
                        VerticalAlignment="Top" />
@@ -532,7 +532,7 @@
                 <TextBlock Grid.Column="1"
                            Text="{Binding ProgressText}"
                            VerticalAlignment="Center"
-                           Foreground="{StaticResource TextSecondaryBrush}" />
+                           Foreground="{DynamicResource TextSecondaryBrush}" />
             </Grid>
             <Expander Grid.Row="1"
                       Header="日志"
