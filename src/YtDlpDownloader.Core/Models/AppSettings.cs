@@ -34,6 +34,9 @@ public sealed class AppSettings
     /// <summary>Preferred maximum video resolution (auto mode only).</summary>
     public ResolutionPreference Resolution { get; set; } = ResolutionPreference.Best;
 
+    /// <summary>When true, save the video cover as a separate image file (yt-dlp --write-thumbnail).</summary>
+    public bool WriteThumbnail { get; set; }
+
     /// <summary>Master switch: when false the proxy is never used, regardless of the site list.</summary>
     public bool ProxyEnabled { get; set; }
 

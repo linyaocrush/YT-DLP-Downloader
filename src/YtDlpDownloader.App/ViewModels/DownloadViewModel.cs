@@ -71,6 +71,8 @@ public sealed class DownloadViewModel : ObservableObject
     private bool _isProgressVisible;
     private bool _hasMediaInfo;
     private double _progress;
+    private string _speedText = string.Empty;
+    private string _etaText = string.Empty;
 
     private ImageSource? _thumbnail;
 
@@ -84,6 +86,12 @@ public sealed class DownloadViewModel : ObservableObject
     private string _fixedFileName = string.Empty;
     private string _outputTemplate = "%(title)s.%(ext)s";
     private int _downloadThreads = 4;
+    private bool _writeThumbnail;
+
+    private readonly ObservableCollection<QueueItemViewModel> _queueItems = new();
+    private bool _isQueueMode;
+    private QueueItemViewModel? _selectedQueueItem;
+    private string _queueProgressText = string.Empty;
 
     private VideoSource? _selectedVideo;
     private AudioSource? _selectedAudio;
@@ -117,6 +125,7 @@ public sealed class DownloadViewModel : ObservableObject
         _downloadKind = settings.Settings.DownloadKind;
         _selectedResolution = ResolutionCatalog.FirstOrDefault(
             option => option.Value == settings.Settings.Resolution) ?? ResolutionCatalog[0];
+        _writeThumbnail = settings.Settings.WriteThumbnail;
 
         VideoSources = new ObservableCollection<VideoSource>();
         AudioSources = new ObservableCollection<AudioSource>();
@@ -139,6 +148,11 @@ public sealed class DownloadViewModel : ObservableObject
         CancelCommand = new RelayCommand(Cancel, CanCancel);
         BrowseFolderCommand = new RelayCommand(BrowseFolder);
         RefreshCookiesCommand = new RelayCommand(RefreshCookieOptions);
+        AddToQueueCommand = new RelayCommand(AddToQueue, CanAddToQueue);
+        ClearQueueCommand = new RelayCommand(ClearQueue, CanClearQueue);
+        RemoveQueueItemCommand = new RelayCommand<QueueItemViewModel>(RemoveQueueItem);
+
+        _queueItems.CollectionChanged += (_, _) => OnQueueChanged();
 
         _settings.Changed += OnSettingsChanged;
         RefreshCookieOptions();
@@ -157,11 +171,17 @@ public sealed class DownloadViewModel : ObservableObject
     /// <summary>Cookie files discovered in the configured folder, plus a leading "none" entry.</summary>
     public ObservableCollection<CookieOption> CookieOptions { get; }
 
+    /// <summary>Videos waiting to be downloaded, shown directly on the download page.</summary>
+    public ObservableCollection<QueueItemViewModel> QueueItems => _queueItems;
+
     public AsyncRelayCommand ParseCommand { get; }
     public AsyncRelayCommand DownloadCommand { get; }
     public RelayCommand CancelCommand { get; }
     public RelayCommand BrowseFolderCommand { get; }
     public RelayCommand RefreshCookiesCommand { get; }
+    public RelayCommand AddToQueueCommand { get; }
+    public RelayCommand ClearQueueCommand { get; }
+    public RelayCommand<QueueItemViewModel> RemoveQueueItemCommand { get; }
 
     /// <summary>Raised once per download attempt, after the download finishes or fails.</summary>
     public event EventHandler<DownloadFinishedEventArgs>? DownloadFinished;
@@ -421,6 +441,127 @@ public sealed class DownloadViewModel : ObservableObject
         }
     }
 
+    /// <summary>When true, save the video cover as a separate image file.</summary>
+    public bool WriteThumbnail
+    {
+        get => _writeThumbnail;
+        set
+        {
+            if (!SetProperty(ref _writeThumbnail, value))
+                return;
+
+            _settings.Settings.WriteThumbnail = value;
+            _settings.Save();
+        }
+    }
+
+    /// <summary>True once at least one video has been added to the in-page queue.</summary>
+    public bool IsQueueMode
+    {
+        get => _isQueueMode;
+        private set
+        {
+            if (!SetProperty(ref _isQueueMode, value))
+                return;
+
+            OnPropertyChanged(nameof(IsSingleMode));
+            OnPropertyChanged(nameof(ShowMediaCard));
+            OnPropertyChanged(nameof(ShowSourceTables));
+            OnPropertyChanged(nameof(ActiveVideoSources));
+            OnPropertyChanged(nameof(ActiveAudioSources));
+            OnPropertyChanged(nameof(ActiveSelectedVideo));
+            OnPropertyChanged(nameof(ActiveSelectedAudio));
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>True when downloading a single video (queue not active).</summary>
+    public bool IsSingleMode => !_isQueueMode;
+
+    /// <summary>True when the single-video cover/title card should be visible.</summary>
+    public bool ShowMediaCard => HasMediaInfo && !_isQueueMode;
+
+    /// <summary>True when the manual video/audio source tables should be visible.</summary>
+    public bool ShowSourceTables => _isManualMode && (!_isQueueMode || _selectedQueueItem is not null);
+
+    /// <summary>Queue item currently selected for manual source picking.</summary>
+    public QueueItemViewModel? SelectedQueueItem
+    {
+        get => _selectedQueueItem;
+        set
+        {
+            if (!SetProperty(ref _selectedQueueItem, value))
+                return;
+
+            OnPropertyChanged(nameof(ActiveVideoSources));
+            OnPropertyChanged(nameof(ActiveAudioSources));
+            OnPropertyChanged(nameof(ActiveSelectedVideo));
+            OnPropertyChanged(nameof(ActiveSelectedAudio));
+            OnPropertyChanged(nameof(ShowSourceTables));
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>Video sources shown in the source table (single mode or the selected queue item).</summary>
+    public ObservableCollection<VideoSource>? ActiveVideoSources
+        => _isQueueMode ? _selectedQueueItem?.VideoSources : VideoSources;
+
+    /// <summary>Audio sources shown in the source table (single mode or the selected queue item).</summary>
+    public ObservableCollection<AudioSource>? ActiveAudioSources
+        => _isQueueMode ? _selectedQueueItem?.AudioSources : AudioSources;
+
+    /// <summary>Video source bound to the source table's selection.</summary>
+    public VideoSource? ActiveSelectedVideo
+    {
+        get => _isQueueMode ? _selectedQueueItem?.SelectedVideo : _selectedVideo;
+        set
+        {
+            if (_isQueueMode)
+            {
+                if (_selectedQueueItem is not null)
+                    _selectedQueueItem.SelectedVideo = value;
+            }
+            else
+            {
+                SelectedVideo = value;
+            }
+
+            OnPropertyChanged();
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>Audio source bound to the source table's selection.</summary>
+    public AudioSource? ActiveSelectedAudio
+    {
+        get => _isQueueMode ? _selectedQueueItem?.SelectedAudio : _selectedAudio;
+        set
+        {
+            if (_isQueueMode)
+            {
+                if (_selectedQueueItem is not null)
+                    _selectedQueueItem.SelectedAudio = value;
+            }
+            else
+            {
+                SelectedAudio = value;
+            }
+
+            OnPropertyChanged();
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>True when the queue contains at least one item.</summary>
+    public bool HasQueueItems => _queueItems.Count > 0;
+
+    /// <summary>Progress summary for the queue header, e.g. "下载 3 / 8".</summary>
+    public string QueueProgressText
+    {
+        get => _queueProgressText;
+        private set => SetProperty(ref _queueProgressText, value);
+    }
+
     public string StatusText
     {
         get => _statusText;
@@ -461,7 +602,11 @@ public sealed class DownloadViewModel : ObservableObject
     public bool HasMediaInfo
     {
         get => _hasMediaInfo;
-        private set => SetProperty(ref _hasMediaInfo, value);
+        private set
+        {
+            if (SetProperty(ref _hasMediaInfo, value))
+                OnPropertyChanged(nameof(ShowMediaCard));
+        }
     }
 
     public string SelectionHint
@@ -481,6 +626,39 @@ public sealed class DownloadViewModel : ObservableObject
     }
 
     public string ProgressText => $"{Progress:0}%";
+
+    public string SpeedText
+    {
+        get => _speedText;
+        private set
+        {
+            if (SetProperty(ref _speedText, value))
+                OnPropertyChanged(nameof(ProgressInfoText));
+        }
+    }
+
+    public string EtaText
+    {
+        get => _etaText;
+        private set
+        {
+            if (SetProperty(ref _etaText, value))
+                OnPropertyChanged(nameof(ProgressInfoText));
+        }
+    }
+
+    public string ProgressInfoText
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(_speedText))
+                parts.Add($"速度 {_speedText}");
+            if (!string.IsNullOrEmpty(_etaText))
+                parts.Add($"剩余 {_etaText}");
+            return string.Join("    ", parts);
+        }
+    }
 
     public bool IsProgressVisible
     {
@@ -522,6 +700,7 @@ public sealed class DownloadViewModel : ObservableObject
         _isManualMode = manual;
         OnPropertyChanged(nameof(IsManualMode));
         OnPropertyChanged(nameof(IsAutoMode));
+        OnPropertyChanged(nameof(ShowSourceTables));
         UpdateSelectionHint();
         NotifyStateChanged();
     }
@@ -637,19 +816,28 @@ public sealed class DownloadViewModel : ObservableObject
         ParseCommand.NotifyCanExecuteChanged();
         DownloadCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
+        AddToQueueCommand.NotifyCanExecuteChanged();
+        ClearQueueCommand.NotifyCanExecuteChanged();
         UpdateSelectionHint();
     }
 
     private bool CanParse()
         => !IsBusy
-           && !string.IsNullOrWhiteSpace(Url)
-           && _cli.ResolveExecutable() is not null;
+           && _cli.ResolveExecutable() is not null
+           && (IsQueueMode
+               ? _queueItems.Any(item => item.IsPending || item.IsFailed)
+               : !string.IsNullOrWhiteSpace(Url));
 
     private bool CanDownload()
-        => !IsBusy
-           && !string.IsNullOrWhiteSpace(Url)
-           && _cli.ResolveExecutable() is not null
-           && (IsAutoMode || ManualSelectionValid);
+    {
+        if (IsBusy || _cli.ResolveExecutable() is null)
+            return false;
+
+        if (IsQueueMode)
+            return _queueItems.Any(item => item.IsPending || item.IsParsed || item.CanRetry);
+
+        return !string.IsNullOrWhiteSpace(Url) && (IsAutoMode || ManualSelectionValid);
+    }
 
     private bool CanCancel() => IsBusy;
 
@@ -691,6 +879,14 @@ public sealed class DownloadViewModel : ObservableObject
         };
     }
 
+    private static string BuildManualExpression(DownloadKind kind, VideoSource? video, AudioSource? audio)
+        => kind switch
+        {
+            DownloadKind.VideoOnly => video!.FormatId,
+            DownloadKind.AudioOnly => audio!.FormatId,
+            _ => video!.HasAudio ? video.FormatId : $"{video.FormatId}+{audio!.FormatId}",
+        };
+
     private static string? ResolutionFilter(ResolutionPreference preference) => preference switch
     {
         ResolutionPreference.Above4K => "[height>2160]",
@@ -704,6 +900,14 @@ public sealed class DownloadViewModel : ObservableObject
 
     private void UpdateSelectionHint()
     {
+        if (IsQueueMode)
+        {
+            SelectionHint = _selectedQueueItem is null
+                ? "队列模式：点击队列中的视频，即可在手动模式下为其选择视频源与音频源。"
+                : $"正在设置：{_selectedQueueItem.Title}";
+            return;
+        }
+
         if (IsManualMode)
         {
             SelectionHint = _downloadKind switch
@@ -737,6 +941,12 @@ public sealed class DownloadViewModel : ObservableObject
 
     private async Task ParseAsync()
     {
+        if (IsQueueMode)
+        {
+            await ParseQueueAsync();
+            return;
+        }
+
         SetBusy(true);
         _cts = new CancellationTokenSource();
         StatusText = "正在解析视频信息…";
@@ -783,6 +993,12 @@ public sealed class DownloadViewModel : ObservableObject
 
     private async Task DownloadAsync()
     {
+        if (IsQueueMode)
+        {
+            await DownloadQueueAsync();
+            return;
+        }
+
         var expression = BuildFormatExpression();
         var directory = string.IsNullOrWhiteSpace(DownloadDirectory)
             ? GetDefaultDownloadDirectory()
@@ -792,6 +1008,8 @@ public sealed class DownloadViewModel : ObservableObject
         _cts = new CancellationTokenSource();
         Progress = 0;
         IsProgressVisible = true;
+        SpeedText = string.Empty;
+        EtaText = string.Empty;
         Logs.Clear();
 
         StatusText = IsAutoMode
@@ -812,7 +1030,7 @@ public sealed class DownloadViewModel : ObservableObject
         {
             var progress = new Progress<DownloadUpdate>(ApplyUpdate);
             var outcome = await _cli.DownloadAsync(
-                Url.Trim(), expression, directory, CookieArgument, ProxyArgument, DownloadThreads, BuildOutputTemplate(), progress, _cts.Token);
+                Url.Trim(), expression, directory, CookieArgument, ProxyArgument, DownloadThreads, BuildOutputTemplate(), WriteThumbnail, progress, _cts.Token);
 
             if (outcome.Cancelled)
             {
@@ -862,6 +1080,12 @@ public sealed class DownloadViewModel : ObservableObject
         if (update.Percent is double percent)
             Progress = percent;
 
+        if (!string.IsNullOrEmpty(update.Speed))
+            SpeedText = update.Speed;
+
+        if (!string.IsNullOrEmpty(update.Eta))
+            EtaText = update.Eta;
+
         if (!string.IsNullOrEmpty(update.Line))
             AppendLog(update.Line);
     }
@@ -870,6 +1094,232 @@ public sealed class DownloadViewModel : ObservableObject
     {
         StatusText = "正在取消…";
         _cts?.Cancel();
+    }
+
+    private bool CanAddToQueue()
+        => !IsBusy
+           && !string.IsNullOrWhiteSpace(Url)
+           && _cli.ResolveExecutable() is not null;
+
+    private void AddToQueue()
+    {
+        var url = Url.Trim();
+        if (url.Length == 0)
+            return;
+
+        _queueItems.Add(new QueueItemViewModel(url));
+        IsQueueMode = true;
+        Url = string.Empty;
+        StatusText = _queueItems.Count == 1
+            ? "已加入队列。继续粘贴链接可添加更多，点击“解析”获取每个视频的封面与标题。"
+            : $"已加入队列（共 {_queueItems.Count} 个），点击“开始下载”可批量下载。";
+    }
+
+    private bool CanClearQueue() => !IsBusy && _queueItems.Count > 0;
+
+    private void ClearQueue()
+    {
+        if (IsBusy)
+            return;
+
+        _queueItems.Clear();
+        IsQueueMode = false;
+        QueueProgressText = string.Empty;
+        StatusText = "已清空下载队列。";
+    }
+
+    private void RemoveQueueItem(QueueItemViewModel item)
+    {
+        if (IsBusy || item is null)
+            return;
+
+        _queueItems.Remove(item);
+        if (_queueItems.Count == 0)
+        {
+            IsQueueMode = false;
+            StatusText = "队列已空。";
+        }
+    }
+
+    private void OnQueueChanged()
+    {
+        OnPropertyChanged(nameof(HasQueueItems));
+        AddToQueueCommand.NotifyCanExecuteChanged();
+        ClearQueueCommand.NotifyCanExecuteChanged();
+        NotifyStateChanged();
+    }
+
+    private string ProxyArgumentFor(string url)
+        => ProxyRules.ShouldUseProxy(_settings.Settings, url)
+            ? ProxyRules.BuildProxyUrl(_settings.Settings) ?? string.Empty
+            : string.Empty;
+
+    private async Task ParseQueueAsync()
+    {
+        var targets = _queueItems.Where(item => item.IsPending || item.IsFailed).ToList();
+        if (targets.Count == 0)
+        {
+            StatusText = "队列中的视频都已解析。";
+            return;
+        }
+
+        SetBusy(true);
+        _cts = new CancellationTokenSource();
+        IsProgressVisible = true;
+        Progress = 0;
+        SpeedText = string.Empty;
+        EtaText = string.Empty;
+
+        var token = _cts.Token;
+        try
+        {
+            for (var i = 0; i < targets.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+                var item = targets[i];
+                QueueProgressText = $"解析 {i + 1} / {targets.Count}";
+                StatusText = $"正在解析第 {i + 1} / {targets.Count} 个：{item.Url}";
+                item.MarkParsing();
+
+                try
+                {
+                    var info = await _cli.GetMediaInfoAsync(item.Url, CookieArgument, ProxyArgumentFor(item.Url), token);
+                    var thumbnail = await LoadThumbnailAsync(info.ThumbnailUrl, token);
+                    item.ApplyInfo(info.Title, info.ThumbnailUrl, thumbnail, info.Videos, info.Audios);
+                }
+                catch (OperationCanceledException)
+                {
+                    item.MarkCancelled();
+                    throw;
+                }
+                catch (YtDlpException ex)
+                {
+                    item.MarkFailed(ex.Message);
+                }
+                catch (Exception ex)
+                {
+                    item.MarkFailed(ex.Message);
+                }
+
+                Progress = (i + 1) * 100.0 / targets.Count;
+            }
+
+            StatusText = $"解析完成：已解析 {targets.Count} 个视频，可点击“开始下载”。";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "解析已取消";
+        }
+        finally
+        {
+            _cts?.Dispose();
+            _cts = null;
+            IsProgressVisible = false;
+            QueueProgressText = string.Empty;
+            SetBusy(false);
+        }
+    }
+
+    private async Task DownloadQueueAsync()
+    {
+        var targets = _queueItems
+            .Where(item => item.IsPending || item.IsParsed || item.CanRetry)
+            .ToList();
+        if (targets.Count == 0)
+        {
+            StatusText = "队列中没有可下载的任务，请先加入队列并解析。";
+            return;
+        }
+
+        var directory = string.IsNullOrWhiteSpace(DownloadDirectory)
+            ? GetDefaultDownloadDirectory()
+            : DownloadDirectory.Trim();
+        var template = IsFixedNameMode && targets.Count > 1 ? null : BuildOutputTemplate();
+
+        SetBusy(true);
+        _cts = new CancellationTokenSource();
+        Progress = 0;
+        IsProgressVisible = true;
+        SpeedText = string.Empty;
+        EtaText = string.Empty;
+        Logs.Clear();
+
+        var token = _cts.Token;
+        var completed = 0;
+        var failed = 0;
+        try
+        {
+            for (var i = 0; i < targets.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+                var item = targets[i];
+                QueueProgressText = $"下载 {i + 1} / {targets.Count}";
+                StatusText = $"正在下载第 {i + 1} / {targets.Count} 个：{item.Title}";
+                item.MarkDownloading();
+                Progress = 0;
+
+                var expression = _isManualMode && item.HasValidManualSelection(_downloadKind)
+                    ? BuildManualExpression(_downloadKind, item.SelectedVideo, item.SelectedAudio)
+                    : YtDlpFormat.BuildExpression(_downloadKind, _selectedResolution.Value);
+                var index = i;
+
+                DownloadOutcome outcome;
+                try
+                {
+                    var progress = new Progress<DownloadUpdate>(update =>
+                    {
+                        ApplyUpdate(update);
+                        var itemPercent = update.Percent ?? item.Progress;
+                        item.ReportProgress(itemPercent);
+                        Progress = (index + itemPercent / 100.0) / targets.Count * 100.0;
+                    });
+                    outcome = await _cli.DownloadAsync(
+                        item.Url, expression, directory, CookieArgument, ProxyArgumentFor(item.Url),
+                        DownloadThreads, template, WriteThumbnail, progress, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    item.MarkCancelled();
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    outcome = new DownloadOutcome(false, false, null, ex.Message);
+                }
+
+                if (outcome.Cancelled)
+                {
+                    item.MarkCancelled();
+                    DownloadFinished?.Invoke(this, new DownloadFinishedEventArgs(false, true, null, null, item.Title, item.Url));
+                }
+                else if (outcome.Success)
+                {
+                    completed++;
+                    item.MarkCompleted(outcome.OutputPath);
+                    DownloadFinished?.Invoke(this, new DownloadFinishedEventArgs(true, false, null, outcome.OutputPath, item.Title, item.Url));
+                }
+                else
+                {
+                    failed++;
+                    item.MarkFailed(outcome.Error);
+                    DownloadFinished?.Invoke(this, new DownloadFinishedEventArgs(false, false, outcome.Error, null, item.Title, item.Url));
+                }
+            }
+
+            StatusText = $"队列下载完成：成功 {completed} 个，失败 {failed} 个。";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "队列下载已取消";
+        }
+        finally
+        {
+            _cts?.Dispose();
+            _cts = null;
+            IsProgressVisible = false;
+            QueueProgressText = string.Empty;
+            SetBusy(false);
+        }
     }
 
     private void BrowseFolder()

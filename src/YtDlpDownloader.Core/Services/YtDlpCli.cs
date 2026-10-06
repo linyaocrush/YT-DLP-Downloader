@@ -29,6 +29,7 @@ public interface IYtDlpCli
         string? proxyUrl = null,
         int concurrentFragments = 1,
         string? outputTemplate = null,
+        bool writeThumbnail = false,
         IProgress<DownloadUpdate>? progress = null,
         CancellationToken cancellationToken = default);
 }
@@ -40,7 +41,12 @@ public sealed record DownloadOutcome(
     string? Error);
 
 /// <summary>One incremental update reported while a download runs.</summary>
-public sealed record DownloadUpdate(string? Line, double? Percent, string? OutputPath);
+public sealed record DownloadUpdate(
+    string? Line,
+    double? Percent,
+    string? OutputPath,
+    string? Speed = null,
+    string? Eta = null);
 
 public sealed class YtDlpCli : IYtDlpCli
 {
@@ -53,6 +59,14 @@ public sealed class YtDlpCli : IYtDlpCli
 
     private static readonly Regex DestinationRegex = new(
         @"\[download\]\s+Destination:\s+(.+?)\s*$",
+        RegexOptions.Compiled);
+
+    private static readonly Regex SpeedRegex = new(
+        @"\[download\].*?\bat\s+(.+?)\s+ETA\b",
+        RegexOptions.Compiled);
+
+    private static readonly Regex EtaRegex = new(
+        @"\bETA\s+(\S+)",
         RegexOptions.Compiled);
 
     private static readonly Regex MergeRegex = new(
@@ -129,6 +143,7 @@ public sealed class YtDlpCli : IYtDlpCli
         string? proxyUrl = null,
         int concurrentFragments = 1,
         string? outputTemplate = null,
+        bool writeThumbnail = false,
         IProgress<DownloadUpdate>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -174,6 +189,11 @@ public sealed class YtDlpCli : IYtDlpCli
             args.Add(concurrentFragments.ToString());
         }
 
+        // Download the cover as a separate image file. Deliberately avoid --embed-thumbnail,
+        // which merges the cover into the media as an extra video track and deletes the image.
+        if (writeThumbnail)
+            args.Add("--write-thumbnail");
+
         args.Add(url);
 
         string? lastDestination = null;
@@ -188,7 +208,14 @@ public sealed class YtDlpCli : IYtDlpCli
             if (percent.Success
                 && double.TryParse(percent.Groups[1].Value, out var value))
             {
-                progress.Report(new DownloadUpdate(null, Math.Clamp(value, 0, 100), null));
+                var speed = SpeedRegex.Match(trimmed);
+                var eta = EtaRegex.Match(trimmed);
+                progress.Report(new DownloadUpdate(
+                    null,
+                    Math.Clamp(value, 0, 100),
+                    null,
+                    speed.Success ? speed.Groups[1].Value.Trim() : null,
+                    eta.Success ? eta.Groups[1].Value.Trim() : null));
                 return;
             }
 

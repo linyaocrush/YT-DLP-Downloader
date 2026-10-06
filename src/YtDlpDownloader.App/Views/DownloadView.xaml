@@ -8,7 +8,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="{Binding DataContext.IsManualMode, ElementName=Root, Converter={StaticResource BoolToStar}}" />
+            <RowDefinition Height="{Binding DataContext.ShowSourceTables, ElementName=Root, Converter={StaticResource BoolToStar}}" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -24,6 +24,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <!-- URL -->
@@ -31,6 +32,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="96" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="视频链接"
@@ -42,7 +44,13 @@
                     <Button Grid.Column="2"
                             Content="解析"
                             Style="{StaticResource AccentButton}"
-                            Command="{Binding ParseCommand}" />
+                            Command="{Binding ParseCommand}"
+                            ToolTip="手动模式：解析当前链接；队列模式：按顺序解析队列中的所有视频" />
+                    <Button Grid.Column="3"
+                            Content="加入队列"
+                            Margin="8,0,0,0"
+                            Command="{Binding AddToQueueCommand}"
+                            ToolTip="将当前链接加入下载队列，下载设置与单个视频相同" />
                 </Grid>
 
                 <!-- save folder -->
@@ -398,6 +406,30 @@
                     </Border>
                 </StackPanel>
                 </Grid>
+
+                <!-- download cover toggle -->
+                <Grid Grid.Row="7" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="96" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="下载封面"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <ToggleButton Grid.Column="1"
+                                  Style="{StaticResource AppSwitch}"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding WriteThumbnail}"
+                                  ToolTip="开启后，随视频额外下载一张封面图片（独立保存，不嵌入视频）" />
+                    <TextBlock Grid.Column="2"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap"
+                               FontSize="12.5"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               Text="开启后额外保存封面图片；关闭则不下载。封面保存为独立图片文件，不会合成进视频。" />
+                </Grid>
             </Grid>
         </Border>
 
@@ -405,7 +437,7 @@
         <Border Grid.Row="1"
                 Style="{StaticResource Card}"
                 Margin="0,12,0,0"
-                Visibility="{Binding HasMediaInfo, Converter={StaticResource BoolToVis}}">
+                Visibility="{Binding ShowMediaCard, Converter={StaticResource BoolToVis}}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -437,7 +469,7 @@
         <Grid Grid.Row="2"
               MinHeight="220"
               Margin="0,12,0,0"
-              Visibility="{Binding IsManualMode, Converter={StaticResource BoolToVis}}">
+              Visibility="{Binding ShowSourceTables, Converter={StaticResource BoolToVis}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="{Binding ShowVideoSources, Converter={StaticResource BoolToStar}}" />
                 <ColumnDefinition Width="{Binding ShowBothSources, Converter={StaticResource BoolToStar}, ConverterParameter=12}" />
@@ -453,8 +485,8 @@
                                Text="视频源"
                                FontWeight="SemiBold"
                                Margin="4,0,0,8" />
-                    <DataGrid ItemsSource="{Binding VideoSources}"
-                              SelectedItem="{Binding SelectedVideo}"
+                    <DataGrid ItemsSource="{Binding ActiveVideoSources}"
+                              SelectedItem="{Binding ActiveSelectedVideo}"
                               MaxHeight="360">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="格式 ID" Binding="{Binding FormatId}" Width="70" />
@@ -478,8 +510,8 @@
                                Text="音频源"
                                FontWeight="SemiBold"
                                Margin="4,0,0,8" />
-                    <DataGrid ItemsSource="{Binding AudioSources}"
-                              SelectedItem="{Binding SelectedAudio}"
+                    <DataGrid ItemsSource="{Binding ActiveAudioSources}"
+                              SelectedItem="{Binding ActiveSelectedAudio}"
                               MaxHeight="360">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="格式 ID" Binding="{Binding FormatId}" Width="70" />
@@ -517,24 +549,140 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid Grid.Row="0"
                   Visibility="{Binding IsProgressVisible, Converter={StaticResource BoolToVis}}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <ProgressBar Grid.Column="0"
+                <TextBlock Grid.Row="0"
+                           Grid.ColumnSpan="2"
+                           Text="{Binding ProgressInfoText}"
+                           Margin="2,0,0,6"
+                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                <ProgressBar Grid.Row="1"
+                             Grid.Column="0"
                              Margin="0,0,10,0"
                              VerticalAlignment="Center"
                              Minimum="0" Maximum="100"
                              Value="{Binding Progress, Mode=OneWay}" />
-                <TextBlock Grid.Column="1"
+                <TextBlock Grid.Row="1"
+                           Grid.Column="1"
                            Text="{Binding ProgressText}"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource TextSecondaryBrush}" />
             </Grid>
-            <Expander Grid.Row="1"
+
+            <!-- Queue (shown once videos are added) -->
+            <Border Grid.Row="1"
+                    Style="{StaticResource Card}"
+                    Margin="0,10,0,0"
+                    Visibility="{Binding IsQueueMode, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="下载队列"
+                                   FontSize="15"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding QueueProgressText}"
+                                   Margin="12,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AccentBrush}" />
+                        <Button Grid.Column="2"
+                                Content="清空队列"
+                                Margin="12,0,0,0"
+                                Command="{Binding ClearQueueCommand}" />
+                    </Grid>
+                    <ListBox Grid.Row="1"
+                             Margin="0,10,0,0"
+                             MaxHeight="340"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ItemsSource="{Binding QueueItems}"
+                             SelectedItem="{Binding SelectedQueueItem}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="8" />
+                                <Setter Property="Margin" Value="0,0,0,6" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Background" Value="{DynamicResource SubtleFillBrush}" />
+                                <Setter Property="BorderThickness" Value="0" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="112"
+                                            Height="63"
+                                            CornerRadius="6"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding HasThumbnail, Converter={StaticResource BoolToVis}}">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                        </Border.Background>
+                                    </Border>
+                                    <StackPanel Grid.Column="1"
+                                                Margin="12,0,0,0"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Url}" />
+                                        <TextBlock Text="{Binding StatusText}"
+                                                   Margin="0,3,0,0"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding SelectionInfo}"
+                                                   Margin="0,3,0,0"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource AccentBrush}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}" />
+                                        <ProgressBar Margin="0,6,0,0"
+                                                     Minimum="0"
+                                                     Maximum="100"
+                                                     Value="{Binding Progress, Mode=OneWay}"
+                                                     Visibility="{Binding ShowProgress, Converter={StaticResource BoolToVis}}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="2"
+                                            Content="移除"
+                                            Margin="12,0,0,0"
+                                            Padding="10,4"
+                                            VerticalAlignment="Center"
+                                            Command="{Binding DataContext.RemoveQueueItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <Expander Grid.Row="2"
                       Header="日志"
                       Margin="0,10,0,0"
                       IsExpanded="False">
@@ -546,6 +694,7 @@
                          VirtualizingPanel.ScrollUnit="Pixel" />
             </Expander>
         </Grid>
-    </Grid>
+
+        </Grid>
     </ScrollViewer>
 </UserControl>
