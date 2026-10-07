@@ -4,4 +4,5 @@ obj/
 .vs/
 dist/
 publish/
+TestResults/
 AGENTS.md

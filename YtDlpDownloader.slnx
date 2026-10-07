@@ -3,4 +3,8 @@
     <Project Path="src/YtDlpDownloader.App/YtDlpDownloader.App.csproj" />
     <Project Path="src/YtDlpDownloader.Core/YtDlpDownloader.Core.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/YtDlpDownloader.App.Tests/YtDlpDownloader.App.Tests.csproj" />
+    <Project Path="tests/YtDlpDownloader.Core.Tests/YtDlpDownloader.Core.Tests.csproj" />
+  </Folder>
 </Solution>
