@@ -46,7 +46,7 @@ public sealed class SettingsService : ISettingsService
         {
             if (File.Exists(_filePath))
             {
-                var deserialized = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_filePath));
+                var deserialized = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_filePath), JsonOptions);
                 if (deserialized is not null)
                     return deserialized;
             }
