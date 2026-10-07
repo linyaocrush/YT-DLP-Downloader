@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/1.jpg" alt="项目图标" width="120">
+  <img src="./assets/logo.jpg" alt="项目图标" width="120">
 </p>
 
 <h1 align="center">YT-DLP Downloader</h1>
@@ -163,7 +163,7 @@ src\YtDlpDownloader.App\bin\Debug\net10.0-windows\YtDlpDownloader.exe
 ```text
 YtDlpDownloader/
 ├─ assets/
-│  ├─ 1.jpg                       # README 顶部展示图标
+│  ├─ logo.jpg                    # README 顶部展示图标
 │  └─ screenshot-*.png            # README 界面预览截图
 ├─ dist/                          # 输出目录（已被 .gitignore 忽略，当前为空）
 ├─ src/
@@ -174,7 +174,7 @@ YtDlpDownloader/
 │  │                              # SettingsService、YtDlpPathService、FfmpegPathService
 │  └─ YtDlpDownloader.App/        # net10.0-windows WPF 界面（AssemblyName: YtDlpDownloader）
 │     ├─ App.xaml(.cs)            # 应用入口 + 手写组合根
-│     ├─ 1.ico                    # 程序 / 窗口图标
+│     ├─ logo.ico                 # 程序 / 窗口图标
 │     ├─ Converters/             # 值转换器
 │     ├─ Services/                # 任务栏进度、完成通知
 │     ├─ Styles/                  # Win11Theme / LightTheme / DarkTheme
