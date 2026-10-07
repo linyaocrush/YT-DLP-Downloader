@@ -5,8 +5,6 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <RootNamespace>YtDlpDownloader.App</RootNamespace>
     <AssemblyName>YtDlpDownloader</AssemblyName>
     <AssemblyTitle>YT-DLP Downloader</AssemblyTitle>

@@ -7,8 +7,8 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using YtDlpDownloader.Core.Mvvm;
 using YtDlpDownloader.Core.Models;
+using YtDlpDownloader.Core.Mvvm;
 using YtDlpDownloader.Core.Services;
 
 namespace YtDlpDownloader.App.ViewModels;

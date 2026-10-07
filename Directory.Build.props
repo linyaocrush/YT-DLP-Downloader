@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    仓库级共享 MSBuild 属性（Core / App / 两个测试项目共同继承）。
+    只放与 TargetFramework 无关的通用设置：TargetFramework 因项目而异，仍保留在各 csproj。
+    不在此设置 TreatWarningsAsErrors —— 门禁请用命令行 /p:TreatWarningsAsErrors=true。
+  -->
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- 内置 Roslyn 分析器 + .editorconfig 代码风格在 build 时生效（不引入任何第三方分析器包）。 -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>

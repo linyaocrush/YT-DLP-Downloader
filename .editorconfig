@@ -1,0 +1,101 @@
+# YtDlpDownloader 仓库级代码风格与分析器配置。
+# 由 `dotnet format` 在本地/CI 读取，并经 EnforceCodeStyleInBuild 参与 `dotnet build`。
+# 仅使用 .NET SDK 内置能力（.editorconfig + 内置 Roslyn analyzers），不引入第三方分析器包。
+
+root = true
+
+# ---------------------------------------------------------------------------
+# 通用文件约定
+# ---------------------------------------------------------------------------
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+# 注意：刻意不设置 end_of_line。
+# 仓库 core.autocrlf=true，工作区行尾混合（部分 LF、部分 CRLF）；固定 crlf 会产生
+# 数千处无意义 diff，固定 lf 又会随 clone/checkout 平台漂移。行尾交由 git 统一处理。
+
+# ---------------------------------------------------------------------------
+# C# 格式与风格
+# ---------------------------------------------------------------------------
+[*.cs]
+# --- 换行/大括号 ---
+csharp_new_line_before_open_brace = all
+
+# --- using 指令 ---
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:warning
+
+# --- 风格（跟随现有代码库：全部为 file-scoped namespace；用 silent 只提示不门禁） ---
+csharp_style_namespace_declarations = file_scoped:silent
+csharp_prefer_braces = true:silent
+
+# ---------------------------------------------------------------------------
+# 命名规则（与现有代码库一致：# 均通过，作为门禁防止新代码偏离）
+# ---------------------------------------------------------------------------
+# 接口：I 前缀 + PascalCase
+dotnet_naming_rule.interfaces_start_with_i.severity = warning
+dotnet_naming_rule.interfaces_start_with_i.symbols = interface_symbols
+dotnet_naming_rule.interfaces_start_with_i.style = interface_style
+
+dotnet_naming_symbols.interface_symbols.applicable_kinds = interface
+dotnet_naming_symbols.interface_symbols.applicable_accessibilities = *
+
+dotnet_naming_style.interface_style.required_prefix = I
+dotnet_naming_style.interface_style.capitalization = pascal_case
+
+# 私有实例字段：_camelCase
+# 注意：代码库约定为「实例私有字段 _camelCase、私有 static readonly 字段 PascalCase」，
+# 而 .editorconfig 的命名 symbol 无法表达「仅实例、排除 static」，故不设为门禁（suggestion）。
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+dotnet_naming_rule.private_fields_underscore.symbols = private_field_symbols
+dotnet_naming_rule.private_fields_underscore.style = private_field_style
+
+dotnet_naming_symbols.private_field_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbols.applicable_accessibilities = private
+
+dotnet_naming_style.private_field_style.required_prefix = _
+dotnet_naming_style.private_field_style.capitalization = camel_case
+
+# 常量：PascalCase
+dotnet_naming_rule.constants_pascal_case.severity = warning
+dotnet_naming_rule.constants_pascal_case.symbols = constant_symbols
+dotnet_naming_rule.constants_pascal_case.style = constant_style
+
+dotnet_naming_symbols.constant_symbols.applicable_kinds = field
+dotnet_naming_symbols.constant_symbols.applicable_accessibilities = *
+dotnet_naming_symbols.constant_symbols.required_modifiers = const
+
+dotnet_naming_style.constant_style.capitalization = pascal_case
+
+# ---------------------------------------------------------------------------
+# 分析器 severity：以下规则对当前代码库「无法在无语义变更的前提下满足」，
+# 统一下调为 suggestion（IDE 里仍可见，但不进入 build / lint 门禁）。
+# AnalysisLevel=latest-recommended 已默认开启大量推荐规则并作为 warning，无需逐条列出。
+# ---------------------------------------------------------------------------
+# WPF ViewModel 的实例属性/方法不可改为 static（XAML Binding 契约）——不移除实例成员。
+dotnet_diagnostic.CA1822.severity = suggestion
+# 要求类型实现 IDisposable 会改变公共 API（App / DownloadViewModel 生命周期由 WPF 管理）。
+dotnet_diagnostic.CA1001.severity = suggestion
+# 使用具体集合/返回类型（CA1859）会改公共签名，属 API 变更。
+dotnet_diagnostic.CA1859.severity = suggestion
+# 忽略 P/Invoke 返回值（ThemeManager.DwmSetWindowAttribute）——DWM 最佳努力调用。
+dotnet_diagnostic.CA1806.severity = suggestion
+# 强制 IFormatProvider 会改变各区域设置下的输出（语义变更），暂不下调为 warning。
+dotnet_diagnostic.CA1305.severity = suggestion
+# 常量数组参数建议改为 static readonly —— 微性能规则，噪音大于价值。
+dotnet_diagnostic.CA1861.severity = suggestion
+# 向 WaitAsync 转发 cancellationToken 会改变“取消后仍排空输出”的既有行为（ProcessRunner.cs:116）。
+dotnet_diagnostic.CA2016.severity = suggestion
+# 类型名以 “Collection” 结尾——对实现集合语义的类型属合理命名。
+dotnet_diagnostic.CA1711.severity = suggestion
+
+# ---------------------------------------------------------------------------
+# 测试项目：测试方法名惯用 `Method_Scenario_Expected`（下划线），与生产命名规则不同，
+# 局部放宽 CA1707 / CA1711，避免对测试命名强加生产约束。
+# ---------------------------------------------------------------------------
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1711.severity = none
