@@ -18,7 +18,12 @@
     <Version>1.0.0</Version>
     <FileVersion>1.0.0.0</FileVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <ApplicationIcon>1.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="1.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\YtDlpDownloader.Core\YtDlpDownloader.Core.csproj" />
