@@ -26,6 +26,23 @@ public class QueueItemViewModelTests
     }
 
     [Fact]
+    public void Constructor_WithTitle_UsesProvidedTitle()
+    {
+        var item = new QueueItemViewModel("https://example.com/v", "Playlist Video");
+
+        Assert.Equal("https://example.com/v", item.Url);
+        Assert.Equal("Playlist Video", item.Title);
+    }
+
+    [Fact]
+    public void Constructor_BlankTitle_FallsBackToUrl()
+    {
+        var item = new QueueItemViewModel("https://example.com/v", "   ");
+
+        Assert.Equal("https://example.com/v", item.Title);
+    }
+
+    [Fact]
     public void MarkParsing_SetsParsingState()
     {
         var item = new QueueItemViewModel("url");
@@ -52,6 +69,28 @@ public class QueueItemViewModelTests
         Assert.Single(item.VideoSources);
         Assert.Single(item.AudioSources);
         Assert.False(item.HasThumbnail);
+    }
+
+    [Fact]
+    public void ApplyInfo_LiveItem_StatusMentionsLive()
+    {
+        var item = new QueueItemViewModel("url");
+
+        item.ApplyInfo("Live", null, null, new[] { Video() }, Array.Empty<AudioSource>(), isLive: true);
+
+        Assert.True(item.IsLive);
+        Assert.Equal("已解析，等待下载（直播）", item.StatusText);
+    }
+
+    [Fact]
+    public void ApplyInfo_NotLive_StatusHasNoLiveSuffix()
+    {
+        var item = new QueueItemViewModel("url");
+
+        item.ApplyInfo("Vod", null, null, Array.Empty<VideoSource>(), Array.Empty<AudioSource>());
+
+        Assert.False(item.IsLive);
+        Assert.Equal("已解析，等待下载", item.StatusText);
     }
 
     [Fact]

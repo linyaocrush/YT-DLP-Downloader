@@ -7,6 +7,12 @@ namespace YtDlpDownloader.Core.Services;
 public interface IMediaInfoParser
 {
     MediaInfo Parse(string json);
+
+    /// <summary>
+    /// Returns a <see cref="PlaylistInfo"/> when <paramref name="json"/> describes a playlist,
+    /// otherwise <c>null</c> so the caller can fall back to a single-video parse.
+    /// </summary>
+    PlaylistInfo? ParsePlaylist(string json);
 }
 
 /// <summary>
@@ -27,6 +33,15 @@ public sealed class MediaInfoParser : IMediaInfoParser
         var title = Str(root, "title") ?? id;
         var webpage = Str(root, "webpage_url") ?? string.Empty;
         var uploader = Str(root, "uploader") ?? Str(root, "channel") ?? string.Empty;
+
+        // Live detection: "is_live" is the authoritative flag; "live_status" is a fallback and
+        // tells apart a running stream (is_live), a scheduled one (is_upcoming) and a finished
+        // one (was_live/post_live). The latter are ordinary videos and must not enter live mode.
+        var liveStatus = Str(root, "live_status");
+        var isLive = Bool(root, "is_live") == true
+            || string.Equals(liveStatus, "is_live", StringComparison.OrdinalIgnoreCase);
+        var isUpcoming = string.Equals(liveStatus, "is_upcoming", StringComparison.OrdinalIgnoreCase)
+            || Bool(root, "is_upcoming") == true;
 
         TimeSpan? duration = null;
         var durationSeconds = Num(root, "duration");
@@ -94,10 +109,47 @@ public sealed class MediaInfoParser : IMediaInfoParser
         audios.Sort((a, b) =>
             b.BitrateKbps.GetValueOrDefault().CompareTo(a.BitrateKbps.GetValueOrDefault()));
 
-        if (videos.Count == 0 && audios.Count == 0)
+        // An upcoming stream exposes no formats yet; keep it parseable so the UI can prompt instead
+        // of reporting a generic parse failure.
+        if (videos.Count == 0 && audios.Count == 0 && !isLive && !isUpcoming)
             throw new InvalidDataException("未解析到任何可用的视频/音频格式");
 
-        return new MediaInfo(id, title, webpage, duration, uploader, BestThumbnail(root), videos, audios);
+        return new MediaInfo(id, title, webpage, duration, uploader, BestThumbnail(root), videos, audios)
+        {
+            IsLive = isLive,
+            IsUpcoming = isUpcoming,
+        };
+    }
+
+    public PlaylistInfo? ParsePlaylist(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+            return null;
+
+        // yt-dlp marks playlist containers with "_type": "playlist"; a single video never has this.
+        if (!string.Equals(Str(root, "_type"), "playlist", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (!root.TryGetProperty("entries", out var entries) || entries.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var items = new List<PlaylistEntry>();
+        foreach (var entry in entries.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+                continue;
+
+            // Flat listings expose the canonical page URL as "webpage_url" and often as "url" too.
+            var url = Str(entry, "webpage_url") ?? Str(entry, "url");
+            if (string.IsNullOrWhiteSpace(url))
+                continue;
+
+            items.Add(new PlaylistEntry(url, Str(entry, "title") ?? url));
+        }
+
+        return new PlaylistInfo(Str(root, "id") ?? "-", Str(root, "title") ?? "播放列表", items);
     }
 
     /// <summary>Prefers the top-level "thumbnail" URL, otherwise the largest entry of "thumbnails".</summary>
@@ -163,6 +215,20 @@ public sealed class MediaInfoParser : IMediaInfoParser
             JsonValueKind.Number => element.TryGetDouble(out var number) ? number : null,
             JsonValueKind.String => double.TryParse(element.GetString(), NumberStyles.Float,
                 CultureInfo.InvariantCulture, out var parsed) ? parsed : null,
+            _ => null,
+        };
+    }
+
+    private static bool? Bool(JsonElement obj, string name)
+    {
+        if (obj.ValueKind != JsonValueKind.Object || !obj.TryGetProperty(name, out var element))
+            return null;
+
+        return element.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String => bool.TryParse(element.GetString(), out var parsed) ? parsed : null,
             _ => null,
         };
     }

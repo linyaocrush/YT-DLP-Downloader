@@ -70,4 +70,22 @@ public class MediaModelTests
     [Fact]
     public void MediaInfo_DurationText_OneHourOrMore_HoursMinutesSeconds()
         => Assert.Equal("1:02:03", Info(new TimeSpan(1, 2, 3)).DurationText);
+
+    [Fact]
+    public void MediaInfo_LiveFlags_DefaultToFalse()
+    {
+        var info = Info(null);
+
+        Assert.False(info.IsLive);
+        Assert.False(info.IsUpcoming);
+    }
+
+    [Fact]
+    public void MediaInfo_LiveFlags_CanBeSetViaInitializer()
+    {
+        var info = Info(null) with { IsLive = true, IsUpcoming = false };
+
+        Assert.True(info.IsLive);
+        Assert.False(info.IsUpcoming);
+    }
 }

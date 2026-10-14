@@ -37,7 +37,8 @@
 
 | 分类 | 说明 |
 | --- | --- |
-| 单条 / 队列下载 | 支持解析单条链接直接下载，也可加入下载队列批量处理并查看每条进度 |
+| 单条 / 队列下载 | 支持解析单条链接直接下载，也可加入下载队列批量处理并查看每条进度；解析到播放列表（视频队列）时自动把列表中的全部视频加入下载队列并逐个解析 |
+| 直播下载 | 解析到正在进行的直播时自动切换为直播模式（`--live-from-start` + `--hls-use-mpegts`，从头录制并使用 MPEG-TS 容器）并给出提示；预告 / 预约直播（`is_upcoming`）单独提示尚未开始，已结束的直播回放（`was_live` / `post_live`）按普通视频处理 |
 | 媒体信息解析 | 解析标题、上传者、时长、分辨率、缩略图等元数据（`--dump-single-json`） |
 | 格式选择 | 自动模式（`bv*+ba/b` + 分辨率偏好）或手动模式（从视频 / 音频源列表中选择具体格式） |
 | 下载内容 | 合并音视频 / 仅视频 / 仅音频 |
@@ -109,7 +110,7 @@ src\YtDlpDownloader.App\bin\Debug\net10.0-windows\YtDlpDownloader.exe
    - 选择 `yt-dlp.exe` 路径；
    - （可选）选择 `ffmpeg.exe` 路径、下载目录、Cookie 文件 / 文件夹；
    - （可选）配置代理协议、主机、端口及白名单 / 黑名单站点。
-2. 在「下载」页粘贴视频链接，应用会调用 yt-dlp 解析媒体信息并展示缩略图与元数据。
+2. 在「下载」页粘贴视频链接，应用会调用 yt-dlp 解析媒体信息并展示缩略图与元数据；若链接是播放列表（视频队列），列表中的全部视频会自动加入下载队列并逐个解析；若链接是正在进行的直播，会自动切换为直播下载模式并提示当前为直播。
 3. 选择下载方式：
    - **自动**：按分辨率偏好自动挑选格式；
    - **手动**：从可用的视频 / 音频源列表中选择具体格式。
@@ -256,6 +257,18 @@ dotnet build -c Release -p:ObfuscateRelease=false
 ```powershell
 Obfuscar.Console.exe obfuscar.xml
 ```
+
+#### 单文件发行版脚本
+
+仓库根目录提供三个批处理脚本，用于编译单文件发行版（Release，会自动执行 Obfuscar 混淆），产物输出到 `publish\` 目录：
+
+| 脚本 | 说明 | 输出 |
+| --- | --- | --- |
+| `build-single-file-self-contained.bat` | 单文件 + 内置 .NET 运行库（self-contained） | `publish\single-file-self-contained\YtDlpDownloader.exe` |
+| `build-single-file-framework-dependent.bat` | 单文件 + 不内置运行库（framework-dependent） | `publish\single-file-framework-dependent\YtDlpDownloader.exe` |
+| `build-single-file-all.bat` | 依次编译上述两个版本 | 上述两个目录 |
+
+直接双击运行即可；在命令行调用时追加 `--no-pause` 可在脚本结束后不暂停。默认目标平台为 `win-x64`（可用 [RuntimeIdentifier](https://learn.microsoft.com/dotnet/core/rid-catalog) 自行调整）。
 
 ## 🤝 贡献
 

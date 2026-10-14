@@ -31,11 +31,12 @@ public sealed class QueueItemViewModel : ObservableObject
     private string? _error;
     private VideoSource? _selectedVideo;
     private AudioSource? _selectedAudio;
+    private bool _isLive;
 
-    public QueueItemViewModel(string url)
+    public QueueItemViewModel(string url, string? title = null)
     {
         Url = url;
-        _title = url;
+        _title = string.IsNullOrWhiteSpace(title) ? url : title;
     }
 
     public string Url { get; }
@@ -171,12 +172,23 @@ public sealed class QueueItemViewModel : ObservableObject
     /// <summary>True when the item failed or was cancelled and can be retried.</summary>
     public bool CanRetry => State == QueueItemState.Failed || State == QueueItemState.Cancelled;
 
+    /// <summary>True when this item is an ongoing live stream and downloads in live mode.</summary>
+    public bool IsLive
+    {
+        get => _isLive;
+        private set
+        {
+            if (SetProperty(ref _isLive, value))
+                OnPropertyChanged(nameof(StatusText));
+        }
+    }
+
     /// <summary>Short state description shown under the title.</summary>
     public string StatusText => State switch
     {
         QueueItemState.Pending => "等待解析",
         QueueItemState.Parsing => "正在解析…",
-        QueueItemState.Parsed => "已解析，等待下载",
+        QueueItemState.Parsed => IsLive ? "已解析，等待下载（直播）" : "已解析，等待下载",
         QueueItemState.Downloading => $"下载中 {ProgressText}",
         QueueItemState.Completed => "已完成",
         QueueItemState.Failed => string.IsNullOrWhiteSpace(Error) ? "失败" : $"失败：{Error}",
@@ -200,8 +212,11 @@ public sealed class QueueItemViewModel : ObservableObject
         string? thumbnailUrl,
         ImageSource? thumbnail,
         IEnumerable<VideoSource> videos,
-        IEnumerable<AudioSource> audios)
+        IEnumerable<AudioSource> audios,
+        bool isLive = false)
     {
+        IsLive = isLive;
+
         if (!string.IsNullOrWhiteSpace(title))
             Title = title;
 

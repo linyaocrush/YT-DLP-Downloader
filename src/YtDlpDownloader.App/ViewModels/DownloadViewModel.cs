@@ -70,6 +70,8 @@ public sealed class DownloadViewModel : ObservableObject
     private bool _isTemplateNameMode = true;
     private bool _isProgressVisible;
     private bool _hasMediaInfo;
+    private bool _isLiveStream;
+    private bool _isUpcomingStream;
     private double _progress;
     private string _speedText = string.Empty;
     private string _etaText = string.Empty;
@@ -108,6 +110,8 @@ public sealed class DownloadViewModel : ObservableObject
 
     private static readonly System.Windows.Media.Brush ProxyOnBrush = CreateFrozenBrush(0x0F, 0x7B, 0x0F);
     private static readonly System.Windows.Media.Brush ProxyOffBrush = CreateFrozenBrush(0x9A, 0x9A, 0x9A);
+    private static readonly System.Windows.Media.Brush LiveBrush = CreateFrozenBrush(0xE5, 0x39, 0x35);
+    private static readonly System.Windows.Media.Brush UpcomingBrush = CreateFrozenBrush(0xF5, 0x7C, 0x00);
 
     public DownloadViewModel(ISettingsService settings, IYtDlpCli cli)
     {
@@ -609,6 +613,55 @@ public sealed class DownloadViewModel : ObservableObject
         }
     }
 
+    /// <summary>True when the parsed link is an ongoing live stream.</summary>
+    public bool IsLiveStream
+    {
+        get => _isLiveStream;
+        private set
+        {
+            if (!SetProperty(ref _isLiveStream, value))
+                return;
+
+            NotifyStreamBannerChanged();
+        }
+    }
+
+    /// <summary>True when the parsed link is a scheduled (not yet started) live stream.</summary>
+    public bool IsUpcomingStream
+    {
+        get => _isUpcomingStream;
+        private set
+        {
+            if (!SetProperty(ref _isUpcomingStream, value))
+                return;
+
+            NotifyStreamBannerChanged();
+        }
+    }
+
+    /// <summary>True when the live-stream banner should be shown.</summary>
+    public bool ShowStreamBanner => _isLiveStream || _isUpcomingStream;
+
+    /// <summary>Banner headline describing the detected live-stream state.</summary>
+    public string StreamBannerTitle => _isLiveStream ? "当前为直播" : "预约直播尚未开始";
+
+    /// <summary>Banner explanation of how the app handles the stream.</summary>
+    public string StreamBannerDetail => _isLiveStream
+        ? "已自动切换为直播下载模式：从头录制（--live-from-start）并使用 MPEG-TS 容器（--hls-use-mpegts），降低中断损坏风险。直播结束前请保持程序运行。"
+        : "该链接为预告 / 预约直播，尚未开始，暂时无法下载。直播开始后请重新点击“解析”。";
+
+    /// <summary>Banner accent colour: red while live, amber while awaiting an upcoming stream.</summary>
+    public System.Windows.Media.Brush StreamBannerBrush => _isLiveStream ? LiveBrush : UpcomingBrush;
+
+    private void NotifyStreamBannerChanged()
+    {
+        OnPropertyChanged(nameof(ShowStreamBanner));
+        OnPropertyChanged(nameof(StreamBannerTitle));
+        OnPropertyChanged(nameof(StreamBannerDetail));
+        OnPropertyChanged(nameof(StreamBannerBrush));
+        NotifyStateChanged();
+    }
+
     public string SelectionHint
     {
         get => _selectionHint;
@@ -800,6 +853,8 @@ public sealed class DownloadViewModel : ObservableObject
         MetaText = string.Empty;
         Thumbnail = null;
         HasMediaInfo = false;
+        IsLiveStream = false;
+        IsUpcomingStream = false;
         SelectedVideo = null;
         SelectedAudio = null;
     }
@@ -836,7 +891,9 @@ public sealed class DownloadViewModel : ObservableObject
         if (IsQueueMode)
             return _queueItems.Any(item => item.IsPending || item.IsParsed || item.CanRetry);
 
-        return !string.IsNullOrWhiteSpace(Url) && (IsAutoMode || ManualSelectionValid);
+        return !IsUpcomingStream
+               && !string.IsNullOrWhiteSpace(Url)
+               && (IsAutoMode || ManualSelectionValid);
     }
 
     private bool CanCancel() => IsBusy;
@@ -951,25 +1008,44 @@ public sealed class DownloadViewModel : ObservableObject
         _cts = new CancellationTokenSource();
         StatusText = "正在解析视频信息…";
 
+        PlaylistInfo? playlist = null;
         try
         {
             var url = Url.Trim();
-            var info = await _cli.GetMediaInfoAsync(url, CookieArgument, ProxyArgument, _cts.Token);
+            var result = await _cli.GetMediaOrPlaylistAsync(url, CookieArgument, ProxyArgument, _cts.Token);
 
-            ClearParseResult();
-            VideoTitle = info.Title;
-            MetaText = $"ID: {info.Id}    时长: {info.DurationText}"
-                + (string.IsNullOrEmpty(info.Uploader) ? string.Empty : $"    上传者: {info.Uploader}");
-            HasMediaInfo = true;
+            if (result.Playlist is { } detected)
+            {
+                playlist = detected;
+            }
+            else if (result.Media is { } info)
+            {
+                ClearParseResult();
+                VideoTitle = info.Title;
+                MetaText = $"ID: {info.Id}    时长: {info.DurationText}"
+                    + (string.IsNullOrEmpty(info.Uploader) ? string.Empty : $"    上传者: {info.Uploader}");
+                HasMediaInfo = true;
 
-            foreach (var video in info.Videos)
-                VideoSources.Add(video);
-            foreach (var audio in info.Audios)
-                AudioSources.Add(audio);
+                foreach (var video in info.Videos)
+                    VideoSources.Add(video);
+                foreach (var audio in info.Audios)
+                    AudioSources.Add(audio);
 
-            Thumbnail = await LoadThumbnailAsync(info.ThumbnailUrl, _cts.Token);
+                Thumbnail = await LoadThumbnailAsync(info.ThumbnailUrl, _cts.Token);
 
-            StatusText = $"解析完成：{info.Title}（{VideoSources.Count} 个视频源，{AudioSources.Count} 个音频源）";
+                IsLiveStream = info.IsLive;
+                IsUpcomingStream = info.IsUpcoming;
+
+                StatusText = info.IsUpcoming
+                    ? $"解析完成：{info.Title}（预约 / 预告直播，尚未开始）"
+                    : info.IsLive
+                        ? $"解析完成：{info.Title}（当前为直播，已切换为直播下载模式）"
+                        : $"解析完成：{info.Title}（{VideoSources.Count} 个视频源，{AudioSources.Count} 个音频源）";
+            }
+            else
+            {
+                StatusText = "解析失败：未获得视频信息。";
+            }
         }
         catch (OperationCanceledException)
         {
@@ -989,6 +1065,34 @@ public sealed class DownloadViewModel : ObservableObject
             _cts = null;
             SetBusy(false);
         }
+
+        if (playlist is null)
+            return;
+
+        if (playlist.Entries.Count == 0)
+        {
+            StatusText = $"解析失败：播放列表“{playlist.Title}”中没有可下载的视频。";
+            return;
+        }
+
+        ExpandPlaylistToQueue(playlist);
+        await ParseQueueAsync();
+    }
+
+    /// <summary>Adds every video of a detected playlist to the queue and switches to queue mode.</summary>
+    private void ExpandPlaylistToQueue(PlaylistInfo playlist)
+    {
+        foreach (var entry in playlist.Entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Url))
+                continue;
+
+            _queueItems.Add(new QueueItemViewModel(entry.Url, entry.Title));
+        }
+
+        IsQueueMode = _queueItems.Count > 0;
+        Url = string.Empty;
+        StatusText = $"检测到播放列表“{playlist.Title}”：已加入 {playlist.Entries.Count} 个视频，正在逐个解析…";
     }
 
     private async Task DownloadAsync()
@@ -1012,14 +1116,21 @@ public sealed class DownloadViewModel : ObservableObject
         EtaText = string.Empty;
         Logs.Clear();
 
-        StatusText = IsAutoMode
-            ? _downloadKind switch
-            {
-                DownloadKind.VideoOnly => "开始下载（仅视频，自动选择最高画质）…",
-                DownloadKind.AudioOnly => "开始下载（仅音频，自动选择最高音质）…",
-                _ => "开始下载（自动选择最佳质量并合成）…",
-            }
-            : $"开始下载（格式 {expression}）…";
+        if (IsLiveStream)
+        {
+            StatusText = "开始直播下载（从头录制，使用 MPEG-TS 容器；直播结束前请保持程序运行）…";
+        }
+        else
+        {
+            StatusText = IsAutoMode
+                ? _downloadKind switch
+                {
+                    DownloadKind.VideoOnly => "开始下载（仅视频，自动选择最高画质）…",
+                    DownloadKind.AudioOnly => "开始下载（仅音频，自动选择最高音质）…",
+                    _ => "开始下载（自动选择最佳质量并合成）…",
+                }
+                : $"开始下载（格式 {expression}）…";
+        }
 
         var success = false;
         var cancelled = false;
@@ -1030,7 +1141,7 @@ public sealed class DownloadViewModel : ObservableObject
         {
             var progress = new Progress<DownloadUpdate>(ApplyUpdate);
             var outcome = await _cli.DownloadAsync(
-                Url.Trim(), expression, directory, CookieArgument, ProxyArgument, DownloadThreads, BuildOutputTemplate(), WriteThumbnail, progress, _cts.Token);
+                Url.Trim(), expression, directory, CookieArgument, ProxyArgument, DownloadThreads, BuildOutputTemplate(), WriteThumbnail, IsLiveStream, progress, _cts.Token);
 
             if (outcome.Cancelled)
             {
@@ -1184,8 +1295,15 @@ public sealed class DownloadViewModel : ObservableObject
                 try
                 {
                     var info = await _cli.GetMediaInfoAsync(item.Url, CookieArgument, ProxyArgumentFor(item.Url), token);
-                    var thumbnail = await LoadThumbnailAsync(info.ThumbnailUrl, token);
-                    item.ApplyInfo(info.Title, info.ThumbnailUrl, thumbnail, info.Videos, info.Audios);
+                    if (info.IsUpcoming)
+                    {
+                        item.MarkFailed("预约直播尚未开始");
+                    }
+                    else
+                    {
+                        var thumbnail = await LoadThumbnailAsync(info.ThumbnailUrl, token);
+                        item.ApplyInfo(info.Title, info.ThumbnailUrl, thumbnail, info.Videos, info.Audios, info.IsLive);
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -1275,7 +1393,7 @@ public sealed class DownloadViewModel : ObservableObject
                     });
                     outcome = await _cli.DownloadAsync(
                         item.Url, expression, directory, CookieArgument, ProxyArgumentFor(item.Url),
-                        DownloadThreads, template, WriteThumbnail, progress, token);
+                        DownloadThreads, template, WriteThumbnail, item.IsLive, progress, token);
                 }
                 catch (OperationCanceledException)
                 {

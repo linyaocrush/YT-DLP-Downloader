@@ -46,6 +46,12 @@ public sealed record MediaInfo(
     IReadOnlyList<VideoSource> Videos,
     IReadOnlyList<AudioSource> Audios)
 {
+    /// <summary>True while the source is an ongoing live stream (yt-dlp <c>is_live</c> / <c>live_status: is_live</c>).</summary>
+    public bool IsLive { get; init; }
+
+    /// <summary>True when the source is a scheduled (not yet started) stream (yt-dlp <c>live_status: is_upcoming</c>).</summary>
+    public bool IsUpcoming { get; init; }
+
     public string DurationText => Duration is null
         ? "-"
         : Duration.Value.TotalHours >= 1

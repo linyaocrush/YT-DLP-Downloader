@@ -323,4 +323,95 @@ public class YtDlpCliTests
         Assert.False(outcome.Cancelled);
         Assert.Contains("failed badly", outcome.Error);
     }
+
+    [Fact]
+    public async Task GetMediaOrPlaylistAsync_Playlist_ReturnsPlaylistAndUsesFlatListing()
+    {
+        _paths.Setup(p => p.Resolve()).Returns("C:/yt-dlp.exe");
+        var args = CaptureArguments(new ProcessResult(false, 0, "{}", string.Empty));
+        var expected = new PlaylistInfo("PL1", "List",
+            new[] { new PlaylistEntry("https://example.com/1", "One") });
+        _parser.Setup(p => p.ParsePlaylist("{}")).Returns(expected);
+
+        var result = await Create().GetMediaOrPlaylistAsync("https://example.com/playlist");
+
+        Assert.Same(expected, result.Playlist);
+        Assert.Null(result.Media);
+        Assert.Contains("--flat-playlist", args);
+        Assert.Contains("--dump-single-json", args);
+        Assert.Equal("https://example.com/playlist", args[^1]);
+        _parser.Verify(p => p.Parse(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetMediaOrPlaylistAsync_SingleVideo_ReturnsMedia()
+    {
+        _paths.Setup(p => p.Resolve()).Returns("C:/yt-dlp.exe");
+        CaptureArguments(new ProcessResult(false, 0, "{}", string.Empty));
+        var expected = new MediaInfo("1", "t", "u", null, null, null,
+            Array.Empty<VideoSource>(), Array.Empty<AudioSource>());
+        _parser.Setup(p => p.ParsePlaylist("{}")).Returns((PlaylistInfo?)null);
+        _parser.Setup(p => p.Parse("{}")).Returns(expected);
+
+        var result = await Create().GetMediaOrPlaylistAsync("https://youtu.be/1");
+
+        Assert.Same(expected, result.Media);
+        Assert.Null(result.Playlist);
+    }
+
+    [Fact]
+    public async Task GetMediaOrPlaylistAsync_FlatSingleMissingFormats_FallsBackToMediaInfo()
+    {
+        _paths.Setup(p => p.Resolve()).Returns("C:/yt-dlp.exe");
+        var args = CaptureArguments(new ProcessResult(false, 0, "{}", string.Empty));
+        var expected = new MediaInfo("1", "t", "u", null, null, null,
+            Array.Empty<VideoSource>(), Array.Empty<AudioSource>());
+        _parser.Setup(p => p.ParsePlaylist(It.IsAny<string>())).Returns((PlaylistInfo?)null);
+        _parser.SetupSequence(p => p.Parse(It.IsAny<string>()))
+            .Throws(new InvalidDataException("no formats"))
+            .Returns(expected);
+
+        var result = await Create().GetMediaOrPlaylistAsync("https://youtu.be/1");
+
+        Assert.Same(expected, result.Media);
+        Assert.Null(result.Playlist);
+        Assert.Contains("--flat-playlist", args);
+        Assert.Contains("--no-playlist", args);
+    }
+
+    [Fact]
+    public async Task GetMediaOrPlaylistAsync_NonZeroExit_ThrowsYtDlpException()
+    {
+        _paths.Setup(p => p.Resolve()).Returns("C:/yt-dlp.exe");
+        CaptureArguments(new ProcessResult(false, 1, "out", "ERROR: nope"));
+
+        var ex = await Assert.ThrowsAsync<YtDlpException>(
+            () => Create().GetMediaOrPlaylistAsync("url"));
+
+        Assert.Contains("nope", ex.Message);
+    }
+
+    [Fact]
+    public async Task DownloadAsync_Live_AddsLiveCaptureFlags()
+    {
+        _paths.Setup(p => p.Resolve()).Returns("C:/yt-dlp.exe");
+        var args = CaptureArguments(new ProcessResult(false, 0, string.Empty, string.Empty));
+
+        await Create().DownloadAsync("url", "bv", Path.GetTempPath(), live: true);
+
+        Assert.Contains("--live-from-start", args);
+        Assert.Contains("--hls-use-mpegts", args);
+    }
+
+    [Fact]
+    public async Task DownloadAsync_NotLive_OmitsLiveCaptureFlags()
+    {
+        _paths.Setup(p => p.Resolve()).Returns("C:/yt-dlp.exe");
+        var args = CaptureArguments(new ProcessResult(false, 0, string.Empty, string.Empty));
+
+        await Create().DownloadAsync("url", "bv", Path.GetTempPath());
+
+        Assert.DoesNotContain("--live-from-start", args);
+        Assert.DoesNotContain("--hls-use-mpegts", args);
+    }
 }

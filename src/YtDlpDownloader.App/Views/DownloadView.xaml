@@ -45,7 +45,7 @@
                             Content="解析"
                             Style="{StaticResource AccentButton}"
                             Command="{Binding ParseCommand}"
-                            ToolTip="手动模式：解析当前链接；队列模式：按顺序解析队列中的所有视频" />
+                            ToolTip="解析当前链接；若为播放列表（视频队列），会自动把列表中的全部视频加入下载队列并逐个解析；队列模式下按顺序解析队列中的所有视频" />
                     <Button Grid.Column="3"
                             Content="加入队列"
                             Margin="8,0,0,0"
@@ -433,37 +433,61 @@
             </Grid>
         </Border>
 
-        <!-- Row 1: parsed media info (cover + title), above the source lists -->
-        <Border Grid.Row="1"
-                Style="{StaticResource Card}"
-                Margin="0,12,0,0"
-                Visibility="{Binding ShowMediaCard, Converter={StaticResource BoolToVis}}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Border Width="160" Height="90"
-                        CornerRadius="6"
-                        Visibility="{Binding HasThumbnail, Converter={StaticResource BoolToVis}}">
-                    <Border.Background>
-                        <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
-                    </Border.Background>
-                </Border>
-                <StackPanel Grid.Column="1"
-                            Margin="16,0,0,0"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="{Binding VideoTitle}"
-                               FontSize="17"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding MetaText}"
-                               Margin="0,6,0,0"
-                               Foreground="{DynamicResource TextSecondaryBrush}"
-                               TextWrapping="Wrap" />
+        <!-- Row 1: live banner + parsed media info (cover + title), above the source lists -->
+        <StackPanel Grid.Row="1">
+            <!-- live / upcoming stream banner -->
+            <Border Style="{StaticResource Card}"
+                    Margin="0,12,0,0"
+                    Visibility="{Binding ShowStreamBanner, Converter={StaticResource BoolToVis}}">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="10"
+                             Height="10"
+                             VerticalAlignment="Center"
+                             Fill="{Binding StreamBannerBrush}" />
+                    <StackPanel Margin="10,0,0,0">
+                        <TextBlock Text="{Binding StreamBannerTitle}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{Binding StreamBannerBrush}" />
+                        <TextBlock Text="{Binding StreamBannerDetail}"
+                                   Margin="0,4,0,0"
+                                   FontSize="12.5"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                    </StackPanel>
                 </StackPanel>
-            </Grid>
-        </Border>
+            </Border>
+
+            <!-- parsed media info (cover + title) -->
+            <Border Style="{StaticResource Card}"
+                    Margin="0,12,0,0"
+                    Visibility="{Binding ShowMediaCard, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="160" Height="90"
+                            CornerRadius="6"
+                            Visibility="{Binding HasThumbnail, Converter={StaticResource BoolToVis}}">
+                        <Border.Background>
+                            <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
+                        </Border.Background>
+                    </Border>
+                    <StackPanel Grid.Column="1"
+                                Margin="16,0,0,0"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{Binding VideoTitle}"
+                                   FontSize="17"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding MetaText}"
+                                   Margin="0,6,0,0"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
 
         <!-- Row 2: source tables (manual selection only) -->
         <Grid Grid.Row="2"

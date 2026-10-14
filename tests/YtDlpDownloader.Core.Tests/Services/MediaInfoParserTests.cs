@@ -212,4 +212,113 @@ public class MediaInfoParserTests
         Assert.Equal("纯视频", Assert.Single(info.Videos).Kind);
         Assert.Null(Assert.Single(info.Videos).AudioCodec);
     }
+
+    [Fact]
+    public void ParsePlaylist_PlaylistPayload_ReturnsEntries()
+    {
+        const string json = """
+        {
+          "_type": "playlist",
+          "id": "PL1",
+          "title": "My Playlist",
+          "entries": [
+            { "_type": "url", "id": "a", "title": "First", "url": "https://example.com/a", "webpage_url": "https://example.com/a" },
+            { "_type": "url", "id": "b", "title": "Second", "url": "https://example.com/b" },
+            { "_type": "url", "id": "c", "title": "No Url" }
+          ]
+        }
+        """;
+
+        var playlist = Assert.IsType<PlaylistInfo>(_parser.ParsePlaylist(json));
+
+        Assert.Equal("PL1", playlist.Id);
+        Assert.Equal("My Playlist", playlist.Title);
+        Assert.Equal(2, playlist.Entries.Count);
+        Assert.Equal("https://example.com/a", playlist.Entries[0].Url);
+        Assert.Equal("First", playlist.Entries[0].Title);
+        Assert.Equal("https://example.com/b", playlist.Entries[1].Url);
+    }
+
+    [Fact]
+    public void ParsePlaylist_SingleVideo_ReturnsNull()
+    {
+        const string json = """
+        { "_type": "video", "id": "1", "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }
+        """;
+
+        Assert.Null(_parser.ParsePlaylist(json));
+    }
+
+    [Fact]
+    public void ParsePlaylist_EmptyEntries_ReturnsEmptyPlaylist()
+    {
+        const string json = """
+        { "_type": "playlist", "id": "PL1", "title": "Empty", "entries": [] }
+        """;
+
+        var playlist = Assert.IsType<PlaylistInfo>(_parser.ParsePlaylist(json));
+
+        Assert.Empty(playlist.Entries);
+    }
+
+    [Fact]
+    public void Parse_IsLiveFlag_SetsIsLive()
+    {
+        const string json = """
+        { "id": "1", "is_live": true, "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }
+        """;
+
+        var info = _parser.Parse(json);
+
+        Assert.True(info.IsLive);
+        Assert.False(info.IsUpcoming);
+    }
+
+    [Fact]
+    public void Parse_LiveStatusIsLive_SetsIsLive()
+    {
+        const string json = """
+        { "id": "1", "live_status": "is_live", "is_live": false, "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }
+        """;
+
+        Assert.True(_parser.Parse(json).IsLive);
+    }
+
+    [Fact]
+    public void Parse_UpcomingStream_SetsIsUpcomingAndAllowsMissingFormats()
+    {
+        const string json = """
+        { "id": "1", "title": "Premiere", "live_status": "is_upcoming", "is_live": false }
+        """;
+
+        var info = _parser.Parse(json);
+
+        Assert.True(info.IsUpcoming);
+        Assert.False(info.IsLive);
+        Assert.Empty(info.Videos);
+        Assert.Empty(info.Audios);
+    }
+
+    [Fact]
+    public void Parse_FinishedLive_IsTreatedAsNormalVideo()
+    {
+        const string json = """
+        { "id": "1", "live_status": "was_live", "was_live": true, "is_live": false, "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }
+        """;
+
+        var info = _parser.Parse(json);
+
+        Assert.False(info.IsLive);
+        Assert.False(info.IsUpcoming);
+    }
+
+    [Fact]
+    public void Parse_NullIsLive_IsNotLive()
+    {
+        const string json = """
+        { "id": "1", "is_live": null, "live_status": "not_live", "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }
+        """;
+
+        Assert.False(_parser.Parse(json).IsLive);
+    }
 }

@@ -21,6 +21,17 @@ public interface IYtDlpCli
         string? proxyUrl = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Parses a URL that may point at a single video or a playlist (video queue). Exactly one of the
+    /// two result fields is non-null: <see cref="MediaParseResult.Playlist"/> for a playlist URL,
+    /// otherwise <see cref="MediaParseResult.Media"/>.
+    /// </summary>
+    Task<MediaParseResult> GetMediaOrPlaylistAsync(
+        string url,
+        string? cookieFile = null,
+        string? proxyUrl = null,
+        CancellationToken cancellationToken = default);
+
     Task<DownloadOutcome> DownloadAsync(
         string url,
         string formatExpression,
@@ -30,6 +41,7 @@ public interface IYtDlpCli
         int concurrentFragments = 1,
         string? outputTemplate = null,
         bool writeThumbnail = false,
+        bool live = false,
         IProgress<DownloadUpdate>? progress = null,
         CancellationToken cancellationToken = default);
 }
@@ -39,6 +51,9 @@ public sealed record DownloadOutcome(
     bool Cancelled,
     string? OutputPath,
     string? Error);
+
+/// <summary>A parsed URL: either a single video or a playlist (video queue).</summary>
+public sealed record MediaParseResult(MediaInfo? Media, PlaylistInfo? Playlist);
 
 /// <summary>One incremental update reported while a download runs.</summary>
 public sealed record DownloadUpdate(
@@ -135,6 +150,51 @@ public sealed class YtDlpCli : IYtDlpCli
         }
     }
 
+    public async Task<MediaParseResult> GetMediaOrPlaylistAsync(
+        string url,
+        string? cookieFile = null,
+        string? proxyUrl = null,
+        CancellationToken cancellationToken = default)
+    {
+        var exe = _paths.Resolve() ?? throw new YtDlpException(NotConfiguredMessage);
+
+        // --flat-playlist lists the videos of a playlist without fetching each one, while a plain
+        // video URL is still resolved with its full format list.
+        var args = new List<string> { "--encoding", "utf-8", "--skip-download", "--flat-playlist", "--no-warnings", "--dump-single-json" };
+        AddCookieArguments(args, cookieFile);
+        AddProxyArguments(args, proxyUrl);
+        args.Add(url);
+
+        var result = await _runner.RunAsync(exe, args, cancellationToken: cancellationToken);
+
+        if (result.Cancelled)
+            throw new OperationCanceledException(cancellationToken);
+
+        if (result.ExitCode != 0)
+            throw new YtDlpException(LastMeaningful(result.StandardError, result.StandardOutput));
+
+        MediaInfo? media = null;
+        PlaylistInfo? playlist;
+        try
+        {
+            playlist = _parser.ParsePlaylist(result.StandardOutput);
+            if (playlist is null)
+                media = _parser.Parse(result.StandardOutput);
+        }
+        catch (InvalidDataException)
+        {
+            // A flat listing of a single video can omit formats; re-query it as a concrete video.
+            return new MediaParseResult(
+                await GetMediaInfoAsync(url, cookieFile, proxyUrl, cancellationToken), null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new YtDlpException($"解析视频信息失败：{ex.Message}");
+        }
+
+        return new MediaParseResult(media, playlist);
+    }
+
     public async Task<DownloadOutcome> DownloadAsync(
         string url,
         string formatExpression,
@@ -144,6 +204,7 @@ public sealed class YtDlpCli : IYtDlpCli
         int concurrentFragments = 1,
         string? outputTemplate = null,
         bool writeThumbnail = false,
+        bool live = false,
         IProgress<DownloadUpdate>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -193,6 +254,14 @@ public sealed class YtDlpCli : IYtDlpCli
         // which merges the cover into the media as an extra video track and deletes the image.
         if (writeThumbnail)
             args.Add("--write-thumbnail");
+
+        // Live stream: capture from the beginning of the stream, and use the MPEG-TS container so
+        // an interrupted capture keeps whatever has already been recorded.
+        if (live)
+        {
+            args.Add("--live-from-start");
+            args.Add("--hls-use-mpegts");
+        }
 
         args.Add(url);
 
