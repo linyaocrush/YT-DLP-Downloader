@@ -24,3 +24,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 ytdlp-downloader-core = { path = "../../../crates/ytdlp-core" }
+
+[features]
+# Must be enabled for production builds. `tauri`'s build script derives `dev` from
+# this feature, and `tauri-codegen` embeds `frontendDist` only when it is off —
+# otherwise the app loads `devUrl` and shows "localhost refused to connect".
+# `tauri build` enables it automatically; a bare cargo build must pass
+# `--features custom-protocol`.
+custom-protocol = ["tauri/custom-protocol"]
