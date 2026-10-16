@@ -1,8 +1,12 @@
-bin/
-obj/
-*.user
-.vs/
-dist/
-publish/
-TestResults/
+# Cargo build output
+/target/
+
+# Frontend
+node_modules/
+apps/desktop/dist/
+
+# Locally built release artifacts (exe / installer copies)
+release/
+
+# Local agent notes
 AGENTS.md

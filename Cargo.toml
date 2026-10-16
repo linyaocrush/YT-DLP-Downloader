@@ -1,8 +1,7 @@
 # Rust workspace for the YT-DLP Downloader rewrite.
 #
-# The original C#/.NET solution still lives in `../src` and `../tests`; this
-# workspace is the Rust port that will eventually replace it. See `README.md`
-# in this directory for the migration plan and progress.
+# This workspace is the only implementation: the original C#/.NET app has been
+# removed now that the Rust port reached feature parity.
 #
 # Phase 1 ports `YtDlpDownloader.Core` (models + services) into `crates/ytdlp-core`.
 # Phase 2 adds the Tauri + Svelte desktop shell in `apps/desktop/src-tauri`.
