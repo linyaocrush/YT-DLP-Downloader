@@ -1,0 +1,40 @@
+# Rust workspace for the YT-DLP Downloader rewrite.
+#
+# The original C#/.NET solution still lives in `../src` and `../tests`; this
+# workspace is the Rust port that will eventually replace it. See `README.md`
+# in this directory for the migration plan and progress.
+#
+# Phase 1 (this crate) ports `YtDlpDownloader.Core` (models + services).
+# Phase 2 will add the Tauri + web frontend app crate as another member.
+
+[workspace]
+resolver = "2"
+members = ["crates/ytdlp-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "LicenseRef-YT-DLP-Downloader-NonCommercial-ShareAlike-1.0"
+authors = ["YT-DLP Downloader contributors"]
+repository = "https://github.com/linyaocrush/YT-DLP-Downloader"
+
+[workspace.dependencies]
+async-trait = "0.1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = [
+    "rt",
+    "rt-multi-thread",
+    "macros",
+    "process",
+    "io-util",
+    "sync",
+    "time",
+] }
+url = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
