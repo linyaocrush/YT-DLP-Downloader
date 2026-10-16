@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities for the main window. Plugins are driven from Rust, so only the core defaults (events, window, path) are required by the frontend.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
