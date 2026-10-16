@@ -17,6 +17,4 @@ pub use ytdlp_cli::{
     last_meaningful, DownloadOutcome, DownloadRequest, DownloadUpdate, MediaParseResult,
     ProgressCallback, YtDlpCli, YtDlpError, NOT_CONFIGURED_MESSAGE,
 };
-pub use ytdlp_path_service::{
-    locate_in_path, PathEnvProvider, PathYtDlpService, YtDlpPathService,
-};
+pub use ytdlp_path_service::{locate_in_path, PathEnvProvider, PathYtDlpService, YtDlpPathService};

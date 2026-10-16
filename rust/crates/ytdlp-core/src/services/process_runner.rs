@@ -168,10 +168,7 @@ where
 }
 
 fn take_string(buffer: &Arc<Mutex<String>>) -> String {
-    buffer
-        .lock()
-        .map(|guard| guard.clone())
-        .unwrap_or_default()
+    buffer.lock().map(|guard| guard.clone()).unwrap_or_default()
 }
 
 /// Kills an entire process tree so a cancelled yt-dlp does not leave ffmpeg behind.

@@ -57,7 +57,10 @@ impl FileSettingsService {
 
 impl SettingsService for FileSettingsService {
     fn settings(&self) -> AppSettings {
-        self.state.lock().map(|guard| guard.clone()).unwrap_or_default()
+        self.state
+            .lock()
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
     }
 
     fn update(&self, mutate: &mut dyn FnMut(&mut AppSettings)) {

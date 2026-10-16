@@ -48,7 +48,8 @@ fn parse_full_payload_maps_all_fields() {
 
 #[test]
 fn parse_missing_title_falls_back_to_id() {
-    let json = r#"{ "id": "xyz", "formats": [ { "format_id": "1", "vcodec": "avc1", "height": 720 } ] }"#;
+    let json =
+        r#"{ "id": "xyz", "formats": [ { "format_id": "1", "vcodec": "avc1", "height": 720 } ] }"#;
 
     let info = parser().parse(json).unwrap();
 
@@ -61,7 +62,10 @@ fn parse_missing_title_falls_back_to_id() {
 #[test]
 fn parse_uses_channel_when_uploader_missing() {
     let json = r#"{ "id": "1", "channel": "The Channel", "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }"#;
-    assert_eq!(parser().parse(json).unwrap().uploader.as_deref(), Some("The Channel"));
+    assert_eq!(
+        parser().parse(json).unwrap().uploader.as_deref(),
+        Some("The Channel")
+    );
 }
 
 #[test]
@@ -97,7 +101,10 @@ fn parse_none_and_empty_codecs_are_skipped() {
     }
     "#;
 
-    assert!(matches!(parser().parse(json), Err(ParseError::InvalidData(_))));
+    assert!(matches!(
+        parser().parse(json),
+        Err(ParseError::InvalidData(_))
+    ));
 }
 
 #[test]
@@ -110,12 +117,18 @@ fn parse_no_formats_array_throws() {
 
 #[test]
 fn parse_non_object_root_throws() {
-    assert!(matches!(parser().parse("[]"), Err(ParseError::InvalidData(_))));
+    assert!(matches!(
+        parser().parse("[]"),
+        Err(ParseError::InvalidData(_))
+    ));
 }
 
 #[test]
 fn parse_invalid_json_throws_invalid_json() {
-    assert!(matches!(parser().parse("not json"), Err(ParseError::InvalidJson(_))));
+    assert!(matches!(
+        parser().parse("not json"),
+        Err(ParseError::InvalidJson(_))
+    ));
 }
 
 #[test]
@@ -180,7 +193,10 @@ fn parse_thumbnails_array_picks_largest_area() {
     }
     "#;
 
-    assert_eq!(parser().parse(json).unwrap().thumbnail_url.as_deref(), Some("large.jpg"));
+    assert_eq!(
+        parser().parse(json).unwrap().thumbnail_url.as_deref(),
+        Some("large.jpg")
+    );
 }
 
 #[test]
@@ -194,12 +210,16 @@ fn parse_direct_thumbnail_preferred_over_array() {
     }
     "#;
 
-    assert_eq!(parser().parse(json).unwrap().thumbnail_url.as_deref(), Some("direct.jpg"));
+    assert_eq!(
+        parser().parse(json).unwrap().thumbnail_url.as_deref(),
+        Some("direct.jpg")
+    );
 }
 
 #[test]
 fn parse_video_only_when_no_audio() {
-    let json = r#"{ "id": "1", "formats": [ { "format_id": "1", "vcodec": "avc1", "height": 480 } ] }"#;
+    let json =
+        r#"{ "id": "1", "formats": [ { "format_id": "1", "vcodec": "avc1", "height": 480 } ] }"#;
 
     let info = parser().parse(json).unwrap();
 
@@ -236,7 +256,8 @@ fn parse_playlist_playlist_payload_returns_entries() {
 
 #[test]
 fn parse_playlist_single_video_returns_none() {
-    let json = r#"{ "_type": "video", "id": "1", "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }"#;
+    let json =
+        r#"{ "_type": "video", "id": "1", "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }"#;
     assert_eq!(parser().parse_playlist(json).unwrap(), None);
 }
 
@@ -249,7 +270,8 @@ fn parse_playlist_empty_entries_returns_empty_playlist() {
 
 #[test]
 fn parse_is_live_flag_sets_is_live() {
-    let json = r#"{ "id": "1", "is_live": true, "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }"#;
+    let json =
+        r#"{ "id": "1", "is_live": true, "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }"#;
     let info = parser().parse(json).unwrap();
     assert!(info.is_live);
     assert!(!info.is_upcoming);
@@ -263,7 +285,8 @@ fn parse_live_status_is_live_sets_is_live() {
 
 #[test]
 fn parse_upcoming_stream_sets_is_upcoming_and_allows_missing_formats() {
-    let json = r#"{ "id": "1", "title": "Premiere", "live_status": "is_upcoming", "is_live": false }"#;
+    let json =
+        r#"{ "id": "1", "title": "Premiere", "live_status": "is_upcoming", "is_live": false }"#;
     let info = parser().parse(json).unwrap();
     assert!(info.is_upcoming);
     assert!(!info.is_live);

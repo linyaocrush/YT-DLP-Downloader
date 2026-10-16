@@ -170,8 +170,8 @@ impl MediaInfoParser for JsonMediaInfoParser {
         }
 
         // yt-dlp marks playlist containers with "_type": "playlist".
-        let is_playlist = str_field(&root, "_type")
-            .is_some_and(|value| value.eq_ignore_ascii_case("playlist"));
+        let is_playlist =
+            str_field(&root, "_type").is_some_and(|value| value.eq_ignore_ascii_case("playlist"));
         if !is_playlist {
             return Ok(None);
         }
@@ -243,9 +243,7 @@ fn compare_desc(left: Option<f64>, right: Option<f64>) -> std::cmp::Ordering {
 /// True when the named string field is present, non-empty and not `"none"`.
 fn is_present(object: &Value, name: &str) -> bool {
     match object.get(name) {
-        Some(Value::String(value)) => {
-            !value.is_empty() && !value.eq_ignore_ascii_case("none")
-        }
+        Some(Value::String(value)) => !value.is_empty() && !value.eq_ignore_ascii_case("none"),
         _ => false,
     }
 }

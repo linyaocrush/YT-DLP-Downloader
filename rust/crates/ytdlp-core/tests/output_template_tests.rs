@@ -13,7 +13,10 @@ fn catalog_contains_title_token_and_label() {
         .iter()
         .any(|(token, label)| *token == "%(title)s" && *label == "标题"));
     // No duplicate tokens.
-    let mut tokens = TEMPLATE_FIELD_CATALOG.iter().map(|(t, _)| *t).collect::<Vec<_>>();
+    let mut tokens = TEMPLATE_FIELD_CATALOG
+        .iter()
+        .map(|(t, _)| *t)
+        .collect::<Vec<_>>();
     tokens.sort_unstable();
     let count = tokens.len();
     tokens.dedup();
@@ -46,7 +49,10 @@ fn build_output_template_fixed_mode_appends_extension() {
         Some("my-video.%(ext)s")
     );
     // Blank fixed names fall back to yt-dlp's default.
-    assert_eq!(build_output_template(OutputNameMode::Fixed, "   ", ""), None);
+    assert_eq!(
+        build_output_template(OutputNameMode::Fixed, "   ", ""),
+        None
+    );
 }
 
 #[test]
@@ -55,5 +61,8 @@ fn build_output_template_template_mode_returns_template_or_none() {
         build_output_template(OutputNameMode::Template, "", "%(title)s.%(ext)s").as_deref(),
         Some("%(title)s.%(ext)s")
     );
-    assert_eq!(build_output_template(OutputNameMode::Template, "", "   "), None);
+    assert_eq!(
+        build_output_template(OutputNameMode::Template, "", "   "),
+        None
+    );
 }

@@ -237,12 +237,20 @@ fn build_cli(
     ffmpeg: &Arc<FakeFfmpeg>,
     parser: &Arc<FakeParser>,
 ) -> YtDlpCli {
-    YtDlpCli::new(
-        Arc::clone(runner),
-        Arc::clone(paths),
-        Arc::clone(ffmpeg),
-        Arc::clone(parser),
-    )
+    // Clone to the concrete handle first, then let the trait-object coercion
+    // happen on the binding (doing it in one expression makes `Arc::clone`
+    // infer its type argument from the trait-object parameter instead).
+    let runner_concrete: Arc<FakeRunner> = Arc::clone(runner);
+    let paths_concrete: Arc<FakePaths> = Arc::clone(paths);
+    let ffmpeg_concrete: Arc<FakeFfmpeg> = Arc::clone(ffmpeg);
+    let parser_concrete: Arc<FakeParser> = Arc::clone(parser);
+
+    let runner: Arc<dyn ProcessRunner> = runner_concrete;
+    let paths: Arc<dyn YtDlpPathService> = paths_concrete;
+    let ffmpeg: Arc<dyn FfmpegPathService> = ffmpeg_concrete;
+    let parser: Arc<dyn MediaInfoParser> = parser_concrete;
+
+    YtDlpCli::new(runner, paths, ffmpeg, parser)
 }
 
 fn has(arguments: &[String], value: &str) -> bool {
@@ -262,7 +270,12 @@ fn recorder() -> (ProgressCallback, Arc<Mutex<Vec<DownloadUpdate>>>) {
 fn resolve_executable_delegates_to_path_service() {
     let runner = Arc::new(FakeRunner::new(ok_process()));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     assert_eq!(cli.resolve_executable().as_deref(), Some("C:/yt-dlp.exe"));
 }
@@ -271,9 +284,17 @@ fn resolve_executable_delegates_to_path_service() {
 async fn get_version_no_executable_returns_null_without_running() {
     let runner = Arc::new(FakeRunner::new(ok_process()));
     let paths = Arc::new(FakePaths::new(None));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
-    assert_eq!(cli.get_version(CancellationToken::new()).await.unwrap(), None);
+    assert_eq!(
+        cli.get_version(CancellationToken::new()).await.unwrap(),
+        None
+    );
     assert_eq!(runner.call_count(), 0);
 }
 
@@ -281,10 +302,18 @@ async fn get_version_no_executable_returns_null_without_running() {
 async fn get_version_success_returns_trimmed_version() {
     let runner = Arc::new(FakeRunner::new(process(0, "  2024.01.01\n", "")));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     assert_eq!(
-        cli.get_version(CancellationToken::new()).await.unwrap().as_deref(),
+        cli.get_version(CancellationToken::new())
+            .await
+            .unwrap()
+            .as_deref(),
         Some("2024.01.01")
     );
 }
@@ -293,16 +322,29 @@ async fn get_version_success_returns_trimmed_version() {
 async fn get_version_non_zero_exit_returns_null() {
     let runner = Arc::new(FakeRunner::new(process(1, "boom", "")));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
-    assert_eq!(cli.get_version(CancellationToken::new()).await.unwrap(), None);
+    assert_eq!(
+        cli.get_version(CancellationToken::new()).await.unwrap(),
+        None
+    );
 }
 
 #[tokio::test]
 async fn get_media_info_no_executable_throws() {
     let runner = Arc::new(FakeRunner::new(ok_process()));
     let paths = Arc::new(FakePaths::new(None));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let error = cli
         .get_media_info("url", None, None, CancellationToken::new())
@@ -333,7 +375,10 @@ async fn get_media_info_success_passes_arguments_and_parses() {
     let arguments = runner.arguments();
     assert!(has(&arguments, "--dump-single-json"));
     assert!(has(&arguments, "--skip-download"));
-    assert_eq!(arguments.last().map(String::as_str), Some("https://youtu.be/1"));
+    assert_eq!(
+        arguments.last().map(String::as_str),
+        Some("https://youtu.be/1")
+    );
     assert!(has(&arguments, "--cookies"));
     assert!(has(&arguments, "c.txt"));
     assert!(has(&arguments, "--proxy"));
@@ -344,7 +389,12 @@ async fn get_media_info_success_passes_arguments_and_parses() {
 async fn get_media_info_cancelled_throws_cancelled() {
     let runner = Arc::new(FakeRunner::new(cancelled_process()));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let error = cli
         .get_media_info("url", None, None, CancellationToken::new())
@@ -358,7 +408,12 @@ async fn get_media_info_cancelled_throws_cancelled() {
 async fn get_media_info_non_zero_exit_throws_with_last_meaningful_error() {
     let runner = Arc::new(FakeRunner::new(process(1, "stdout tail", "line1\nline2")));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let error = cli
         .get_media_info("url", None, None, CancellationToken::new())
@@ -377,7 +432,8 @@ async fn get_media_info_parser_failure_wrapped_in_message() {
     let runner = Arc::new(FakeRunner::new(process(0, "{}", "")));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
     let parser = Arc::new(
-        FakeParser::new(sample_media()).failing_once(ParseError::InvalidData("bad data".to_string())),
+        FakeParser::new(sample_media())
+            .failing_once(ParseError::InvalidData("bad data".to_string())),
     );
     let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &parser);
 
@@ -397,10 +453,19 @@ async fn get_media_info_parser_failure_wrapped_in_message() {
 async fn download_no_executable_returns_error_outcome() {
     let runner = Arc::new(FakeRunner::new(ok_process()));
     let paths = Arc::new(FakePaths::new(None));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let outcome = cli
-        .download(DownloadRequest::new("url", "bv", "C:/out"), None, CancellationToken::new())
+        .download(
+            DownloadRequest::new("url", "bv", "C:/out"),
+            None,
+            CancellationToken::new(),
+        )
         .await
         .unwrap();
 
@@ -417,16 +482,25 @@ async fn download_success_builds_expected_arguments() {
     let runner = Arc::new(FakeRunner::new(ok_process()));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
     let ffmpeg = Arc::new(FakeFfmpeg::new(Some("C:/ffmpeg.exe")));
-    let cli = build_cli(&runner, &paths, &ffmpeg, &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &ffmpeg,
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
-    let mut request = DownloadRequest::new("https://youtu.be/1", "bv*[height<=720]+ba", output.clone());
+    let mut request =
+        DownloadRequest::new("https://youtu.be/1", "bv*[height<=720]+ba", output.clone());
     request.cookie_file = Some("cookies.txt".to_string());
     request.proxy_url = Some("socks5://p:1080".to_string());
     request.concurrent_fragments = 3;
     request.output_template = Some("%(id)s.%(ext)s".to_string());
     request.write_thumbnail = true;
 
-    let outcome = cli.download(request, None, CancellationToken::new()).await.unwrap();
+    let outcome = cli
+        .download(request, None, CancellationToken::new())
+        .await
+        .unwrap();
 
     assert!(outcome.success);
     let arguments = runner.arguments();
@@ -455,11 +529,20 @@ async fn download_default_template_and_single_fragment() {
 
     let runner = Arc::new(FakeRunner::new(ok_process()));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
-    cli.download(DownloadRequest::new("url", "bv", output.clone()), None, CancellationToken::new())
-        .await
-        .unwrap();
+    cli.download(
+        DownloadRequest::new("url", "bv", output.clone()),
+        None,
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
 
     let arguments = runner.arguments();
     assert!(!has(&arguments, "--concurrent-fragments"));
@@ -484,7 +567,12 @@ async fn download_destination_then_merge_uses_merged_path() {
         ],
     ));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
     let (progress, _items) = recorder();
 
     let outcome = cli
@@ -508,7 +596,12 @@ async fn download_only_destination_uses_destination() {
         &["[download] Destination: C:/out/only.mp4"],
     ));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
     let (progress, _items) = recorder();
 
     let outcome = cli
@@ -536,7 +629,12 @@ async fn download_progress_lines_report_percent_speed_eta() {
     ));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
     let ffmpeg = Arc::new(FakeFfmpeg::new(None));
-    let cli = build_cli(&runner, &paths, &ffmpeg, &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &ffmpeg,
+        &Arc::new(FakeParser::new(sample_media())),
+    );
     let (progress, items) = recorder();
 
     cli.download(
@@ -561,7 +659,12 @@ async fn download_cancelled_result_returns_cancelled_outcome() {
     let temp = TempDir::new();
     let runner = Arc::new(FakeRunner::new(cancelled_process()));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let outcome = cli
         .download(
@@ -581,7 +684,12 @@ async fn download_runner_throws_cancelled_returns_cancelled_outcome() {
     let temp = TempDir::new();
     let runner = Arc::new(FakeRunner::failing_cancelled());
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let outcome = cli
         .download(
@@ -601,7 +709,12 @@ async fn download_non_zero_exit_returns_error_outcome() {
     let temp = TempDir::new();
     let runner = Arc::new(FakeRunner::new(process(2, "out", "ERROR: failed badly")));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let outcome = cli
         .download(
@@ -633,7 +746,12 @@ async fn get_media_or_playlist_playlist_returns_playlist_and_uses_flat_listing()
     let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &parser);
 
     let result = cli
-        .get_media_or_playlist("https://example.com/playlist", None, None, CancellationToken::new())
+        .get_media_or_playlist(
+            "https://example.com/playlist",
+            None,
+            None,
+            CancellationToken::new(),
+        )
         .await
         .unwrap();
 
@@ -642,7 +760,10 @@ async fn get_media_or_playlist_playlist_returns_playlist_and_uses_flat_listing()
     let arguments = runner.arguments();
     assert!(has(&arguments, "--flat-playlist"));
     assert!(has(&arguments, "--dump-single-json"));
-    assert_eq!(arguments.last().map(String::as_str), Some("https://example.com/playlist"));
+    assert_eq!(
+        arguments.last().map(String::as_str),
+        Some("https://example.com/playlist")
+    );
     assert_eq!(parser.parse_calls.load(Ordering::SeqCst), 0);
 }
 
@@ -650,7 +771,12 @@ async fn get_media_or_playlist_playlist_returns_playlist_and_uses_flat_listing()
 async fn get_media_or_playlist_single_video_returns_media() {
     let runner = Arc::new(FakeRunner::new(process(0, "{}", "")));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let result: MediaParseResult = cli
         .get_media_or_playlist("https://youtu.be/1", None, None, CancellationToken::new())
@@ -687,7 +813,12 @@ async fn get_media_or_playlist_flat_single_missing_formats_falls_back_to_media_i
 async fn get_media_or_playlist_non_zero_exit_throws() {
     let runner = Arc::new(FakeRunner::new(process(1, "out", "ERROR: nope")));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let error = cli
         .get_media_or_playlist("url", None, None, CancellationToken::new())
@@ -705,11 +836,18 @@ async fn download_live_adds_live_capture_flags() {
     let temp = TempDir::new();
     let runner = Arc::new(FakeRunner::new(ok_process()));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     let mut request = DownloadRequest::new("url", "bv", temp.path().to_string_lossy());
     request.live = true;
-    cli.download(request, None, CancellationToken::new()).await.unwrap();
+    cli.download(request, None, CancellationToken::new())
+        .await
+        .unwrap();
 
     let arguments = runner.arguments();
     assert!(has(&arguments, "--live-from-start"));
@@ -721,7 +859,12 @@ async fn download_not_live_omits_live_capture_flags() {
     let temp = TempDir::new();
     let runner = Arc::new(FakeRunner::new(ok_process()));
     let paths = Arc::new(FakePaths::new(Some("C:/yt-dlp.exe")));
-    let cli = build_cli(&runner, &paths, &Arc::new(FakeFfmpeg::new(None)), &Arc::new(FakeParser::new(sample_media())));
+    let cli = build_cli(
+        &runner,
+        &paths,
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
 
     cli.download(
         DownloadRequest::new("url", "bv", temp.path().to_string_lossy()),

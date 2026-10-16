@@ -82,7 +82,10 @@ fn should_use_proxy_disabled_returns_false() {
         proxy_sites: vec!["youtube.com".to_string()],
         ..enabled(ProxyProtocol::Http)
     };
-    assert!(!ProxyRules::should_use_proxy(&settings, Some("https://youtube.com/x")));
+    assert!(!ProxyRules::should_use_proxy(
+        &settings,
+        Some("https://youtube.com/x")
+    ));
 }
 
 #[test]
@@ -92,8 +95,14 @@ fn should_use_proxy_whitelist_listed_url_true() {
         proxy_sites: vec!["youtube.com".to_string()],
         ..enabled(ProxyProtocol::Http)
     };
-    assert!(ProxyRules::should_use_proxy(&settings, Some("https://youtube.com/watch?v=1")));
-    assert!(!ProxyRules::should_use_proxy(&settings, Some("https://vimeo.com/1")));
+    assert!(ProxyRules::should_use_proxy(
+        &settings,
+        Some("https://youtube.com/watch?v=1")
+    ));
+    assert!(!ProxyRules::should_use_proxy(
+        &settings,
+        Some("https://vimeo.com/1")
+    ));
 }
 
 #[test]
@@ -103,8 +112,14 @@ fn should_use_proxy_blacklist_listed_url_false() {
         proxy_sites: vec!["youtube.com".to_string()],
         ..enabled(ProxyProtocol::Http)
     };
-    assert!(!ProxyRules::should_use_proxy(&settings, Some("https://youtube.com/watch?v=1")));
-    assert!(ProxyRules::should_use_proxy(&settings, Some("https://vimeo.com/1")));
+    assert!(!ProxyRules::should_use_proxy(
+        &settings,
+        Some("https://youtube.com/watch?v=1")
+    ));
+    assert!(ProxyRules::should_use_proxy(
+        &settings,
+        Some("https://vimeo.com/1")
+    ));
 }
 
 #[test]
@@ -151,7 +166,10 @@ fn matches_path_prefix_narrows_rule() {
 
 #[test]
 fn matches_site_without_scheme_parses() {
-    assert!(ProxyRules::matches("https://youtube.com/watch?v=1", "youtube.com/watch"));
+    assert!(ProxyRules::matches(
+        "https://youtube.com/watch?v=1",
+        "youtube.com/watch"
+    ));
 }
 
 #[test]

@@ -1,8 +1,8 @@
 //! User-editable application settings, persisted as JSON.
 //!
-//! The JSON shape intentionally matches the C# original (`JsonStringEnumConverter`
-//! + PascalCase property names) so a `settings.json` written by either
-//! implementation can be read by the other.
+//! The JSON shape intentionally matches the C# original
+//! (`JsonStringEnumConverter`, PascalCase property names) so a `settings.json`
+//! written by either implementation can be read by the other.
 
 use serde::{Deserialize, Serialize};
 

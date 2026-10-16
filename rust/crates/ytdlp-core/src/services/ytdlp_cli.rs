@@ -285,13 +285,7 @@ impl YtDlpCli {
         arguments.push(url.to_string());
 
         let result = self
-            .run_process(
-                &executable,
-                &arguments,
-                None,
-                None,
-                cancellation.clone(),
-            )
+            .run_process(&executable, &arguments, None, None, cancellation.clone())
             .await?;
 
         if result.cancelled {
@@ -310,12 +304,13 @@ impl YtDlpCli {
                 media: None,
                 playlist: Some(playlist),
             }),
-            Ok(None) => self.parser.parse(&result.standard_output).map(|media| {
-                MediaParseResult {
+            Ok(None) => self
+                .parser
+                .parse(&result.standard_output)
+                .map(|media| MediaParseResult {
                     media: Some(media),
                     playlist: None,
-                }
-            }),
+                }),
             Err(error) => Err(error),
         };
 
@@ -427,10 +422,12 @@ impl YtDlpCli {
             )));
         }
 
-        let output_path = tracking
-            .lock()
-            .ok()
-            .and_then(|guard| guard.final_path.clone().or_else(|| guard.last_destination.clone()));
+        let output_path = tracking.lock().ok().and_then(|guard| {
+            guard
+                .final_path
+                .clone()
+                .or_else(|| guard.last_destination.clone())
+        });
 
         Ok(DownloadOutcome {
             success: true,
@@ -571,7 +568,8 @@ fn add_proxy_arguments(arguments: &mut Vec<String>, proxy_url: Option<&str>) {
 
 /// Joins the last three non-empty lines of stderr + stdout, or a generic message.
 pub fn last_meaningful(standard_error: &str, standard_output: &str) -> String {
-    let lines = format!("{standard_error}\n{standard_output}")
+    let combined = format!("{standard_error}\n{standard_output}");
+    let lines = combined
         .split('\n')
         .map(str::trim)
         .filter(|line| !line.is_empty())

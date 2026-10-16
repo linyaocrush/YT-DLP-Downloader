@@ -62,7 +62,11 @@ async fn run_echo_returns_stdout_and_exit_code() {
     assert!(!result.cancelled);
     assert_eq!(result.exit_code, 0);
     assert!(result.standard_output.contains("hello-world"));
-    assert!(lines.lock().unwrap().iter().any(|line| line == "hello-world"));
+    assert!(lines
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|line| line == "hello-world"));
 }
 
 #[tokio::test]

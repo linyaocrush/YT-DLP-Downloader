@@ -26,6 +26,6 @@ pub use services::{
     DownloadUpdate, FfmpegPathService, FileSettingsService, JsonMediaInfoParser, LineCallback,
     MediaInfoParser, MediaParseResult, ParseError, PathEnvProvider, PathFfmpegService,
     PathYtDlpService, ProcessError, ProcessResult, ProcessRunner, ProgressCallback,
-    SettingsListener, SettingsService, TokioProcessRunner, YtDlpCli, YtDlpError,
-    YtDlpPathService, NOT_CONFIGURED_MESSAGE,
+    SettingsListener, SettingsService, TokioProcessRunner, YtDlpCli, YtDlpError, YtDlpPathService,
+    NOT_CONFIGURED_MESSAGE,
 };

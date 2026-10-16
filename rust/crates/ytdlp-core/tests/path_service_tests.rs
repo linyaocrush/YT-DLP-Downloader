@@ -102,7 +102,10 @@ fn ytdlp_resolve_configured_existing_returns_without_save() {
     }));
     let service = PathYtDlpService::new(dyn_settings(Arc::clone(&settings)));
 
-    assert_eq!(service.resolve(), Some(executable.to_string_lossy().into_owned()));
+    assert_eq!(
+        service.resolve(),
+        Some(executable.to_string_lossy().into_owned())
+    );
     assert_eq!(settings.save_count(), 0);
 }
 
@@ -133,7 +136,11 @@ fn ytdlp_resolve_nothing_configured_or_on_path_returns_null() {
     std::fs::create_dir_all(&empty).unwrap();
 
     let settings = Arc::new(FakeSettings::new(AppSettings {
-        yt_dlp_path: temp.path().join("missing.exe").to_string_lossy().into_owned(),
+        yt_dlp_path: temp
+            .path()
+            .join("missing.exe")
+            .to_string_lossy()
+            .into_owned(),
         ..Default::default()
     }));
     let service = PathYtDlpService::with_path_env(

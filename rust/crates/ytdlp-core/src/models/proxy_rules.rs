@@ -40,7 +40,12 @@ impl ProxyRules {
 
         let listed = url
             .filter(|value| !value.trim().is_empty())
-            .is_some_and(|value| settings.proxy_sites.iter().any(|site| Self::matches(value, site)));
+            .is_some_and(|value| {
+                settings
+                    .proxy_sites
+                    .iter()
+                    .any(|site| Self::matches(value, site))
+            });
 
         match settings.proxy_list_mode {
             ProxyListMode::Whitelist => listed,
@@ -72,14 +77,19 @@ impl ProxyRules {
         // A path in the entry (anything beyond "/") narrows the rule to that prefix.
         site_path.is_empty()
             || site_path == "/"
-            || url_path.to_lowercase().starts_with(&site_path.to_lowercase())
+            || url_path
+                .to_lowercase()
+                .starts_with(&site_path.to_lowercase())
     }
 
     fn host_matches(url_host: &str, site_host: &str) -> bool {
         let url = Self::normalize_host(url_host);
         let site = Self::normalize_host(site_host);
 
-        url.eq_ignore_ascii_case(&site) || url.to_lowercase().ends_with(&format!(".{}", site.to_lowercase()))
+        url.eq_ignore_ascii_case(&site)
+            || url
+                .to_lowercase()
+                .ends_with(&format!(".{}", site.to_lowercase()))
     }
 
     fn normalize_host(host: &str) -> String {

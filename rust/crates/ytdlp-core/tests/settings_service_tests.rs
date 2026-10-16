@@ -74,7 +74,11 @@ fn save_writes_enums_as_strings() {
 #[test]
 fn constructor_corrupted_file_falls_back_to_defaults() {
     let temp = TempDir::new();
-    fs::write(temp.path().join("settings.json"), "{ this is not valid json").unwrap();
+    fs::write(
+        temp.path().join("settings.json"),
+        "{ this is not valid json",
+    )
+    .unwrap();
 
     let service = FileSettingsService::new(Some(temp.path().to_path_buf()));
     let settings = service.settings();
