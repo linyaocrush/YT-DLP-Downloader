@@ -375,6 +375,7 @@ async fn get_media_info_success_passes_arguments_and_parses() {
     let arguments = runner.arguments();
     assert!(has(&arguments, "--dump-single-json"));
     assert!(has(&arguments, "--skip-download"));
+    assert!(has(&arguments, "--ignore-no-formats-error"));
     assert_eq!(
         arguments.last().map(String::as_str),
         Some("https://youtu.be/1")
@@ -760,6 +761,7 @@ async fn get_media_or_playlist_playlist_returns_playlist_and_uses_flat_listing()
     let arguments = runner.arguments();
     assert!(has(&arguments, "--flat-playlist"));
     assert!(has(&arguments, "--dump-single-json"));
+    assert!(has(&arguments, "--ignore-no-formats-error"));
     assert_eq!(
         arguments.last().map(String::as_str),
         Some("https://example.com/playlist")
@@ -877,4 +879,30 @@ async fn download_not_live_omits_live_capture_flags() {
     let arguments = runner.arguments();
     assert!(!has(&arguments, "--live-from-start"));
     assert!(!has(&arguments, "--hls-use-mpegts"));
+}
+
+#[test]
+fn last_meaningful_drops_null_json_output() {
+    let message = ytdlp_downloader_core::last_meaningful(
+        "ERROR: [youtube] abc: This live event has ended.",
+        "null",
+    );
+    assert_eq!(message, "ERROR: [youtube] abc: This live event has ended.");
+
+    let message = ytdlp_downloader_core::last_meaningful(
+        "ERROR: boom",
+        "{\"id\": \"abc\"}\n[debug] something",
+    );
+    assert_eq!(message, "ERROR: boom");
+}
+
+#[test]
+fn friendly_error_explains_live_end_and_format_errors() {
+    let live = ytdlp_downloader_core::friendly_error("This live event has ended.");
+    assert!(live.contains("直播已结束"));
+
+    let format = ytdlp_downloader_core::friendly_error(
+        "Requested format is not available. Use --list-formats",
+    );
+    assert!(format.contains("格式"));
 }

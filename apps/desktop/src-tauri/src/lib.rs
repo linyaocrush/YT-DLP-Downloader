@@ -19,6 +19,7 @@ pub fn run() {
             commands::ytdlp_status,
             commands::detect_ytdlp,
             commands::ffmpeg_status,
+            commands::deno_status,
             commands::default_download_dir,
             commands::list_cookie_files,
             commands::cookie_folder_status,

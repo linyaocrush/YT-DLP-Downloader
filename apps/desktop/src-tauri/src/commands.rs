@@ -2,6 +2,7 @@
 //! Svelte frontend owns the UI state and orchestration.
 
 use std::path::Path;
+use std::process::Stdio;
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -12,14 +13,14 @@ use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
 use ytdlp_downloader_core::{
-    AppSettings, CancellationToken, DownloadKind, DownloadRequest, DownloadUpdate,
+    locate_in_path, AppSettings, CancellationToken, DownloadKind, DownloadRequest, DownloadUpdate,
     ProgressCallback, ProxyListMode, ProxyRules, YtDlpFormat,
 };
 
 use crate::dto::{
-    CookieFileDto, CookieListingDto, DownloadOutcomeDto, DownloadRequestDto, DownloadUpdateDto,
-    FfmpegStatusDto, MediaInfoDto, ParseResultDto, PlaylistInfoDto, ProxyIndicatorDto,
-    YtDlpDetectionDto, YtDlpStatusDto,
+    CookieFileDto, CookieListingDto, DenoStatusDto, DownloadOutcomeDto, DownloadRequestDto,
+    DownloadUpdateDto, FfmpegStatusDto, MediaInfoDto, ParseResultDto, PlaylistInfoDto,
+    ProxyIndicatorDto, YtDlpDetectionDto, YtDlpStatusDto,
 };
 use crate::error::CommandError;
 use crate::state::AppState;
@@ -165,6 +166,55 @@ pub fn ffmpeg_status(state: State<'_, AppState>) -> FfmpegStatusDto {
         show_download_hint: state.ffmpeg_paths.configured_path().is_none(),
         status_text,
     }
+}
+
+#[tauri::command]
+pub async fn deno_status() -> DenoStatusDto {
+    let Some(located) = locate_in_path("deno.exe") else {
+        return DenoStatusDto {
+            located_in_path: None,
+            version: None,
+            ready: false,
+            status_text: "未在系统 PATH 中检测到 Deno。Deno 不是必需项，但 YouTube 的部分格式需要 JavaScript 运行时；安装后请重启本程序，让新的 PATH 生效。"
+                .to_string(),
+        };
+    };
+
+    let version = deno_version(&located).await;
+    let ready = version.is_some();
+    let status_text = match &version {
+        Some(version) => format!("已在系统 PATH 中检测到 Deno：{located}（{version}）"),
+        None => format!("已找到 Deno，但无法运行它，请确认安装完整：{located}"),
+    };
+
+    DenoStatusDto {
+        located_in_path: Some(located),
+        version,
+        ready,
+        status_text,
+    }
+}
+
+/// Runs `deno --version` without flashing a console window.
+async fn deno_version(path: &str) -> Option<String> {
+    let mut command = tokio::process::Command::new(path);
+    command
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+
+    let output = command.output().await.ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let first_line = String::from_utf8_lossy(&output.stdout);
+    let first_line = first_line.lines().next().unwrap_or_default().trim();
+    (!first_line.is_empty()).then(|| first_line.to_string())
 }
 
 #[tauri::command]

@@ -70,6 +70,12 @@ impl MediaInfoParser for JsonMediaInfoParser {
             .as_deref()
             .is_some_and(|status| status.eq_ignore_ascii_case("is_upcoming"))
             || bool_field(&root, "is_upcoming") == Some(true);
+        // A post-live stream has just ended and YouTube is still preparing the
+        // VOD. yt-dlp may return no formats at all during this window; keep the
+        // metadata parseable so the UI can explain what is happening.
+        let is_post_live = live_status
+            .as_deref()
+            .is_some_and(|status| status.eq_ignore_ascii_case("post_live"));
 
         let duration = num_field(&root, "duration")
             .and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
@@ -140,8 +146,10 @@ impl MediaInfoParser for JsonMediaInfoParser {
         audios.sort_by(|a, b| compare_desc(a.bitrate_kbps, b.bitrate_kbps));
 
         // An upcoming stream exposes no formats yet; keep it parseable so the UI
-        // can prompt instead of reporting a generic parse failure.
-        if videos.is_empty() && audios.is_empty() && !is_live && !is_upcoming {
+        // can prompt instead of reporting a generic parse failure. The same is
+        // true right after a live stream ends (post_live), while YouTube is
+        // still generating the replay.
+        if videos.is_empty() && audios.is_empty() && !is_live && !is_upcoming && !is_post_live {
             return Err(ParseError::InvalidData(
                 "未解析到任何可用的视频/音频格式".to_string(),
             ));
@@ -159,6 +167,7 @@ impl MediaInfoParser for JsonMediaInfoParser {
         );
         media.is_live = is_live;
         media.is_upcoming = is_upcoming;
+        media.live_status = live_status;
 
         Ok(media)
     }

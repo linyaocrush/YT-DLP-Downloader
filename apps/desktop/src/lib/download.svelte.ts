@@ -132,6 +132,7 @@ class DownloadStore {
   selectedAudio = $state<AudioSourceDto | null>(null);
   isLive = $state(false);
   isUpcoming = $state(false);
+  liveStatus = $state<string | null>(null);
 
   // --- run state ----------------------------------------------------------
   isBusy = $state(false);
@@ -366,22 +367,40 @@ class DownloadStore {
     }
   }
 
+  get isPostLive(): boolean {
+    return this.liveStatus?.toLowerCase() === "post_live";
+  }
+
+  get hasPlayableFormats(): boolean {
+    return this.videos.length > 0 || this.audios.length > 0;
+  }
+
   get showStreamBanner(): boolean {
-    return this.isLive || this.isUpcoming;
+    return this.isLive || this.isUpcoming || this.isPostLive;
   }
 
   get streamBannerTitle(): string {
-    return this.isLive ? "当前为直播" : "预约直播尚未开始";
+    if (this.isLive) return "当前为直播";
+    if (this.isPostLive) return "直播已结束";
+    return "预约直播尚未开始";
   }
 
   get streamBannerDetail(): string {
-    return this.isLive
-      ? "已自动切换为直播下载模式：从头录制（--live-from-start）并使用 MPEG-TS 容器（--hls-use-mpegts），降低中断损坏风险。直播结束前请保持程序运行。"
-      : "该链接为预告 / 预约直播，尚未开始，暂时无法下载。直播开始后请重新点击“解析”。";
+    if (this.isLive) {
+      return "已自动切换为直播下载模式：从头录制（--live-from-start）并使用 MPEG-TS 容器（--hls-use-mpegts），降低中断损坏风险。直播结束前请保持程序运行。";
+    }
+    if (this.isPostLive) {
+      return this.hasPlayableFormats
+        ? "YouTube 已生成回放，可以开始下载。若下载失败，请稍后重新解析。"
+        : "直播刚刚结束，YouTube 仍在生成回放，暂时拿不到可下载格式。通常需要几分钟到数小时，请稍后重新点击“解析”。";
+    }
+    return "该链接为预告 / 预约直播，尚未开始，暂时无法下载。直播开始后请重新点击“解析”。";
   }
 
-  get streamBannerKind(): "live" | "upcoming" {
-    return this.isLive ? "live" : "upcoming";
+  get streamBannerKind(): "live" | "upcoming" | "post_live" {
+    if (this.isLive) return "live";
+    if (this.isPostLive) return "post_live";
+    return "upcoming";
   }
 
   get progressText(): string {
@@ -458,6 +477,7 @@ class DownloadStore {
     }
     return (
       !this.isUpcoming &&
+      (!this.hasMediaInfo || this.hasPlayableFormats) &&
       this.url.trim().length > 0 &&
       (this.isAutoMode || this.manualSelectionValid)
     );
@@ -598,6 +618,7 @@ class DownloadStore {
     this.hasMediaInfo = false;
     this.isLive = false;
     this.isUpcoming = false;
+    this.liveStatus = null;
     this.selectedVideo = null;
     this.selectedAudio = null;
   }
@@ -650,11 +671,20 @@ class DownloadStore {
     this.thumbnailUrl = info.thumbnailUrl;
     this.isLive = info.isLive;
     this.isUpcoming = info.isUpcoming;
+    this.liveStatus = info.liveStatus;
+    const postLive = info.liveStatus?.toLowerCase() === "post_live";
+    const hasFormats = info.videos.length > 0 || info.audios.length > 0;
     this.statusText = info.isUpcoming
       ? `解析完成：${info.title}（预约 / 预告直播，尚未开始）`
       : info.isLive
         ? `解析完成：${info.title}（当前为直播，已切换为直播下载模式）`
-        : `解析完成：${info.title}（${info.videos.length} 个视频源，${info.audios.length} 个音频源）`;
+        : postLive
+          ? hasFormats
+            ? `解析完成：${info.title}（直播已结束，回放格式已可用）`
+            : `解析完成：${info.title}（直播刚结束，YouTube 正在生成回放，暂时无法下载；请稍后重新解析）`
+          : hasFormats
+            ? `解析完成：${info.title}（${info.videos.length} 个视频源，${info.audios.length} 个音频源）`
+            : `解析完成：${info.title}（未找到可下载格式，请稍后重新解析）`;
   }
 
   private expandPlaylistToQueue(playlist: PlaylistInfoDto): void {
@@ -692,6 +722,14 @@ class DownloadStore {
     item.error = null;
     item.videos = info.videos;
     item.audios = info.audios;
+
+    const postLive = info.liveStatus?.toLowerCase() === "post_live";
+    if (postLive && info.videos.length === 0 && info.audios.length === 0) {
+      item.error = "直播刚结束，YouTube 正在生成回放，暂时无法下载；请稍后重新解析。";
+      item.state = "Failed";
+      return;
+    }
+
     item.state = "Parsed";
   }
 
@@ -749,9 +787,63 @@ class DownloadStore {
 
   // ------------------------------------------------------------- download
 
+  /// Re-checks a live URL right before downloading: a stream that was live
+  /// when parsed may have ended since. Returns false when there is nothing
+  /// downloadable yet (post-live replay still being generated).
+  private async refreshLiveState(url: string, item?: QueueItem): Promise<boolean> {
+    try {
+      const info = await api.getMediaInfo(url);
+      const postLive = info.liveStatus?.toLowerCase() === "post_live";
+      const hasFormats = info.videos.length > 0 || info.audios.length > 0;
+
+      if (item) {
+        item.isLive = info.isLive;
+        item.videos = info.videos;
+        item.audios = info.audios;
+      } else {
+        this.isLive = info.isLive;
+        this.isUpcoming = info.isUpcoming;
+        this.liveStatus = info.liveStatus;
+        this.videos = info.videos;
+        this.audios = info.audios;
+        if (
+          this.selectedVideo &&
+          !this.videos.some((video) => video.formatId === this.selectedVideo!.formatId)
+        ) {
+          this.selectedVideo = null;
+        }
+        if (
+          this.selectedAudio &&
+          !this.audios.some((audio) => audio.formatId === this.selectedAudio!.formatId)
+        ) {
+          this.selectedAudio = null;
+        }
+      }
+
+      if (postLive && !hasFormats) {
+        const message =
+          "直播刚结束，YouTube 正在生成回放，暂时无法下载；请稍后重新解析。";
+        if (item) {
+          item.error = message;
+          item.state = "Failed";
+        } else {
+          this.statusText = message;
+        }
+        return false;
+      }
+    } catch {
+      // Keep the previous state; the actual download will surface the error.
+    }
+    return true;
+  }
+
   async download(): Promise<void> {
     if (this.isQueueMode) {
       await this.downloadQueue();
+      return;
+    }
+
+    if (this.isLive && !(await this.refreshLiveState(this.url.trim()))) {
       return;
     }
 
@@ -873,6 +965,12 @@ class DownloadStore {
         this.progress = 0;
         this.queueIndex = index;
         this.currentItemId = item.id;
+
+        if (item.isLive && !(await this.refreshLiveState(item.url, item))) {
+          failed += 1;
+          this.notifyFinished(false, false, item.error, null, item.title, item.url);
+          continue;
+        }
 
         const useManual = this.isManualMode && hasValidManualSelection(item, this.downloadKind);
         const request = this.buildRequest(

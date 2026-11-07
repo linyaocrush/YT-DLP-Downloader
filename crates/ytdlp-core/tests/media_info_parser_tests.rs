@@ -295,6 +295,18 @@ fn parse_upcoming_stream_sets_is_upcoming_and_allows_missing_formats() {
 }
 
 #[test]
+fn parse_post_live_stream_allows_missing_formats() {
+    let json =
+        r#"{ "id": "1", "title": "Just Ended", "live_status": "post_live", "is_live": false }"#;
+    let info = parser().parse(json).unwrap();
+    assert!(!info.is_live);
+    assert!(!info.is_upcoming);
+    assert_eq!(info.live_status.as_deref(), Some("post_live"));
+    assert!(info.videos.is_empty());
+    assert!(info.audios.is_empty());
+}
+
+#[test]
 fn parse_finished_live_is_treated_as_normal_video() {
     let json = r#"{ "id": "1", "live_status": "was_live", "was_live": true, "is_live": false, "formats": [ { "format_id": "1", "vcodec": "avc1" } ] }"#;
     let info = parser().parse(json).unwrap();

@@ -225,6 +225,7 @@ impl YtDlpCli {
             "--skip-download",
             "--no-playlist",
             "--no-warnings",
+            "--ignore-no-formats-error",
             "--dump-single-json",
         ]
         .into_iter()
@@ -243,10 +244,10 @@ impl YtDlpCli {
         }
 
         if result.exit_code != 0 {
-            return Err(YtDlpError::Message(last_meaningful(
+            return Err(YtDlpError::Message(friendly_error(&last_meaningful(
                 &result.standard_error,
                 &result.standard_output,
-            )));
+            ))));
         }
 
         self.parser
@@ -275,6 +276,7 @@ impl YtDlpCli {
             "--skip-download",
             "--flat-playlist",
             "--no-warnings",
+            "--ignore-no-formats-error",
             "--dump-single-json",
         ]
         .into_iter()
@@ -293,10 +295,10 @@ impl YtDlpCli {
         }
 
         if result.exit_code != 0 {
-            return Err(YtDlpError::Message(last_meaningful(
+            return Err(YtDlpError::Message(friendly_error(&last_meaningful(
                 &result.standard_error,
                 &result.standard_output,
-            )));
+            ))));
         }
 
         let parsed = match self.parser.parse_playlist(&result.standard_output) {
@@ -416,10 +418,10 @@ impl YtDlpCli {
         }
 
         if result.exit_code != 0 {
-            return Ok(DownloadOutcome::failed(last_meaningful(
+            return Ok(DownloadOutcome::failed(friendly_error(&last_meaningful(
                 &result.standard_error,
                 &result.standard_output,
-            )));
+            ))));
         }
 
         let output_path = tracking.lock().ok().and_then(|guard| {
@@ -567,18 +569,79 @@ fn add_proxy_arguments(arguments: &mut Vec<String>, proxy_url: Option<&str>) {
 }
 
 /// Joins the last three non-empty lines of stderr + stdout, or a generic message.
+///
+/// yt-dlp prints a bare `null` to stdout when `--dump-single-json` fails (the
+/// extractor returned no info), so it must be filtered out; otherwise the UI
+/// would show `ERROR: ... | null`.
 pub fn last_meaningful(standard_error: &str, standard_output: &str) -> String {
     let combined = format!("{standard_error}\n{standard_output}");
-    let lines = combined
+    let mut lines = combined
         .split('\n')
         .map(str::trim)
         .filter(|line| !line.is_empty())
+        .filter(|line| !is_ignorable_output_line(line))
         .collect::<Vec<_>>();
+    lines.dedup();
 
     if lines.is_empty() {
         return "未知错误（yt-dlp 非零退出码）".to_string();
     }
 
-    let start = lines.len().saturating_sub(3);
-    lines[start..].join(" | ")
+    // Prefer the actual ERROR/WARNING lines over incidental progress output.
+    let error_lines = lines
+        .iter()
+        .copied()
+        .filter(|line| is_error_line(line))
+        .collect::<Vec<_>>();
+    let selected = if error_lines.is_empty() {
+        lines.as_slice()
+    } else {
+        error_lines.as_slice()
+    };
+
+    let start = selected.len().saturating_sub(3);
+    selected[start..].join(" | ")
+}
+
+/// True for stdout noise that should never be shown as the error message.
+fn is_ignorable_output_line(line: &str) -> bool {
+    let line = line.trim();
+    line.eq_ignore_ascii_case("null")
+        || line.starts_with('{')
+        || line.starts_with('[')
+        || line == "NA"
+}
+
+/// True for lines that describe an actual yt-dlp failure.
+fn is_error_line(line: &str) -> bool {
+    let line = line.trim_start();
+    line.starts_with("ERROR:") || line.starts_with("WARNING:")
+}
+
+/// Translates the most common yt-dlp failures into actionable Chinese text.
+pub fn friendly_error(message: &str) -> String {
+    let lower = message.to_ascii_lowercase();
+
+    if lower.contains("this live event has ended") {
+        return "该直播已结束，但 YouTube 尚未生成可下载的回放（通常需要几分钟到数小时）。请稍后重新解析；若已过很久仍失败，可能是该直播没有保留回放。".to_string();
+    }
+
+    if lower.contains("requested format is not available") {
+        return "YouTube 未返回可用的视频/音频格式（格式可能已过期、cookie 失效，或该视频需要登录/地区权限）。请重新解析后再试。".to_string();
+    }
+
+    if lower.contains("this video is unavailable") || lower.contains("video unavailable") {
+        return "视频当前不可用：可能已被删除、设为私有、受地区限制，或需要登录后访问。"
+            .to_string();
+    }
+
+    if lower.contains("sign in to confirm") || lower.contains("login required") {
+        return "YouTube 要求登录或人机验证，请更新 cookies 后重试。".to_string();
+    }
+
+    if lower.contains("no supported javascript runtime") {
+        return "yt-dlp 缺少 JavaScript 运行时，部分 YouTube 格式可能缺失。请安装 Deno 或更新 yt-dlp。".to_string();
+    }
+
+    message.to_string()
 }

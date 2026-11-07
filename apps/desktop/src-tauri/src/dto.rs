@@ -78,6 +78,7 @@ pub struct MediaInfoDto {
     pub audios: Vec<AudioSourceDto>,
     pub is_live: bool,
     pub is_upcoming: bool,
+    pub live_status: Option<String>,
 }
 
 impl From<&MediaInfo> for MediaInfoDto {
@@ -93,6 +94,7 @@ impl From<&MediaInfo> for MediaInfoDto {
             audios: info.audios.iter().map(AudioSourceDto::from).collect(),
             is_live: info.is_live,
             is_upcoming: info.is_upcoming,
+            live_status: info.live_status.clone(),
         }
     }
 }
@@ -233,6 +235,17 @@ pub struct FfmpegStatusDto {
     pub ready: bool,
     pub show_manual_controls: bool,
     pub show_download_hint: bool,
+    pub status_text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DenoStatusDto {
+    /// `deno.exe` found on `PATH`, or `null` when it is not installed/visible.
+    pub located_in_path: Option<String>,
+    /// First line of `deno --version`, e.g. `deno 2.5.0 (...)`.
+    pub version: Option<String>,
+    pub ready: bool,
     pub status_text: String,
 }
 

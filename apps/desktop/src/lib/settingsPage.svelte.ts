@@ -3,6 +3,7 @@
 import * as api from "./api";
 import { settingsStore, ui } from "./store.svelte";
 import {
+  DENO_DOWNLOAD_URL,
   FFMPEG_DOWNLOAD_URL,
   YTDLP_DOWNLOAD_URL,
   type AppTheme,
@@ -30,6 +31,9 @@ class SettingsPageStore {
   showFfmpegDownloadHint = $state(false);
   ffmpegReady = $state(false);
 
+  denoStatus = $state("");
+  denoReady = $state(false);
+
   cookieFolderStatus = $state("");
   proxyStatus = $state("");
   newProxySite = $state("");
@@ -49,16 +53,18 @@ class SettingsPageStore {
   get environmentStatusText(): string {
     const yt = this.ytDlpReady;
     const ff = this.ffmpegReady;
-    if (yt && ff) return "运行环境正常：已检测到 yt-dlp 与 ffmpeg。";
-    if (yt && !ff) return "部分就绪：已检测到 yt-dlp，但缺少可用的 ffmpeg。";
-    if (!yt && ff) return "部分就绪：已检测到 ffmpeg，但缺少可用的 yt-dlp。";
-    return "环境未就绪：未检测到可用的 yt-dlp 与 ffmpeg。";
+    const deno = this.denoReady ? "，Deno 已就绪" : "，未检测到 Deno（可选）";
+    if (yt && ff) return `运行环境正常：已检测到 yt-dlp 与 ffmpeg${deno}。`;
+    if (yt && !ff) return `部分就绪：已检测到 yt-dlp，但缺少可用的 ffmpeg${deno}。`;
+    if (!yt && ff) return `部分就绪：已检测到 ffmpeg，但缺少可用的 yt-dlp${deno}。`;
+    return `环境未就绪：未检测到可用的 yt-dlp 与 ffmpeg${deno}。`;
   }
 
   async initialize(): Promise<void> {
     await Promise.all([
       this.refreshDetection(),
       this.refreshFfmpegStatus(),
+      this.refreshDenoStatus(),
       this.refreshCookieFolderStatus(),
       this.refreshProxyStatus(),
     ]);
@@ -100,6 +106,7 @@ class SettingsPageStore {
   async rescan(): Promise<void> {
     await this.refreshDetection();
     await this.refreshFfmpegStatus();
+    await this.refreshDenoStatus();
   }
 
   // --- ffmpeg -------------------------------------------------------------
@@ -129,6 +136,24 @@ class SettingsPageStore {
 
   async clearFfmpeg(): Promise<void> {
     await this.setFfmpegPath("");
+  }
+
+  // --- deno ---------------------------------------------------------------
+
+  async refreshDenoStatus(): Promise<void> {
+    this.denoStatus = "正在检测 Deno…";
+    try {
+      const status = await api.denoStatus();
+      this.denoReady = status.ready;
+      this.denoStatus = status.statusText;
+    } catch (error) {
+      this.denoReady = false;
+      this.denoStatus = `检测失败：${errorMessage(error)}`;
+    }
+  }
+
+  openDenoDownload(): void {
+    void api.openUrl(DENO_DOWNLOAD_URL);
   }
 
   // --- cookies ------------------------------------------------------------

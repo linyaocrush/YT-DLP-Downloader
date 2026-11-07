@@ -263,7 +263,12 @@
     <div class="card mt">
       <div class="row" style="align-items:center">
         {#if downloadStore.thumbnailUrl}
-          <img class="cover cover-160" src={downloadStore.thumbnailUrl} alt="" />
+          <img
+            class="cover cover-160"
+            src={downloadStore.thumbnailUrl}
+            alt=""
+            referrerpolicy="no-referrer"
+          />
         {/if}
         <div style="margin-left:16px; min-width:0">
           <div style="font-size:17px; font-weight:600; line-height:1.4">
@@ -396,7 +401,12 @@
               }}
             >
               {#if item.thumbnailUrl}
-                <img class="cover cover-112" src={item.thumbnailUrl} alt="" />
+                <img
+                  class="cover cover-112"
+                  src={item.thumbnailUrl}
+                  alt=""
+                  referrerpolicy="no-referrer"
+                />
               {/if}
               <div class="queue-body">
                 <div class="queue-title" title={item.url}>{item.title}</div>

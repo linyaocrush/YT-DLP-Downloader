@@ -125,6 +125,11 @@ pub struct MediaInfo {
     pub is_live: bool,
     /// True when the source is a scheduled (not yet started) stream.
     pub is_upcoming: bool,
+    /// Raw yt-dlp `live_status` (`is_live`, `post_live`, `was_live`, ...).
+    ///
+    /// `post_live` means the stream has ended but YouTube is still preparing
+    /// the regular VOD; formats are often unavailable during that window.
+    pub live_status: Option<String>,
 }
 
 impl MediaInfo {
@@ -150,6 +155,7 @@ impl MediaInfo {
             audios,
             is_live: false,
             is_upcoming: false,
+            live_status: None,
         }
     }
 

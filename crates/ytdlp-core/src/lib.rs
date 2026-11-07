@@ -21,11 +21,11 @@ pub use models::{
     VideoSource, YtDlpFormat,
 };
 pub use services::{
-    ffmpeg_path_service, last_meaningful, locate_in_path, media_info_parser, process_runner,
-    settings_service, ytdlp_cli, ytdlp_path_service, DownloadOutcome, DownloadRequest,
-    DownloadUpdate, FfmpegPathService, FileSettingsService, JsonMediaInfoParser, LineCallback,
-    MediaInfoParser, MediaParseResult, ParseError, PathEnvProvider, PathFfmpegService,
-    PathYtDlpService, ProcessError, ProcessResult, ProcessRunner, ProgressCallback,
-    SettingsListener, SettingsService, TokioProcessRunner, YtDlpCli, YtDlpError, YtDlpPathService,
-    NOT_CONFIGURED_MESSAGE,
+    ffmpeg_path_service, friendly_error, last_meaningful, locate_in_path, media_info_parser,
+    process_runner, settings_service, ytdlp_cli, ytdlp_path_service, DownloadOutcome,
+    DownloadRequest, DownloadUpdate, FfmpegPathService, FileSettingsService, JsonMediaInfoParser,
+    LineCallback, MediaInfoParser, MediaParseResult, ParseError, PathEnvProvider,
+    PathFfmpegService, PathYtDlpService, ProcessError, ProcessResult, ProcessRunner,
+    ProgressCallback, SettingsListener, SettingsService, TokioProcessRunner, YtDlpCli, YtDlpError,
+    YtDlpPathService, NOT_CONFIGURED_MESSAGE,
 };

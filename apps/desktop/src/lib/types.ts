@@ -68,6 +68,7 @@ export interface MediaInfoDto {
   audios: AudioSourceDto[];
   isLive: boolean;
   isUpcoming: boolean;
+  liveStatus: string | null;
 }
 
 export interface PlaylistEntryDto {
@@ -143,6 +144,13 @@ export interface FfmpegStatusDto {
   statusText: string;
 }
 
+export interface DenoStatusDto {
+  locatedInPath: string | null;
+  version: string | null;
+  ready: boolean;
+  statusText: string;
+}
+
 export interface CookieFileDto {
   path: string;
   name: string;
@@ -212,6 +220,7 @@ export const EXTENSION_TOKEN = "%(ext)s";
 
 export const YTDLP_DOWNLOAD_URL = "https://github.com/yt-dlp/yt-dlp/releases";
 export const FFMPEG_DOWNLOAD_URL = "https://ffmpeg.org/download.html";
+export const DENO_DOWNLOAD_URL = "https://docs.deno.com/runtime/getting_started/installation/";
 
 export function defaultSettings(): AppSettings {
   return {

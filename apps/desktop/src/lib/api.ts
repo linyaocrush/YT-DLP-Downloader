@@ -8,6 +8,7 @@ import type {
   AppSettings,
   AppTheme,
   CookieListingDto,
+  DenoStatusDto,
   DownloadOutcomeDto,
   DownloadRequestDto,
   DownloadUpdateDto,
@@ -31,6 +32,8 @@ export const ytdlpStatus = () => invoke<YtDlpStatusDto>("ytdlp_status");
 export const detectYtDlp = () => invoke<YtDlpDetectionDto>("detect_ytdlp");
 
 export const ffmpegStatus = () => invoke<FfmpegStatusDto>("ffmpeg_status");
+
+export const denoStatus = () => invoke<DenoStatusDto>("deno_status");
 
 export const defaultDownloadDir = () => invoke<string>("default_download_dir");
 

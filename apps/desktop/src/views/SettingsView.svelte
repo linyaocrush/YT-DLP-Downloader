@@ -164,7 +164,8 @@
         <p class="card-title">环境检测</p>
         <p class="subtitle">
           本工具依赖本机的 yt-dlp 与 ffmpeg，不会内置或自动下载。程序启动时会先从系统 PATH
-          中自动查找，未找到时可在此手动指定。
+          中自动查找，未找到时可在此手动指定。YouTube 的部分格式还需要 JavaScript 运行时，推荐安装
+          Deno（可选）。
         </p>
       </div>
       <div class="env-indicator" title={settingsPage.environmentStatusText} style="margin-top:2px">
@@ -233,6 +234,24 @@
 
       <div class="subpanel" style="background:var(--accent-soft); border:none; padding:12px 10px">
         <span>{settingsPage.ffmpegStatus}</span>
+      </div>
+    </div>
+
+    <div class="subpanel">
+      <p class="panel-title">Deno（可选）</p>
+      <p class="subtitle">
+        YouTube 的部分格式和 JS 挑战需要 JavaScript 运行时，yt-dlp 默认使用 Deno。未安装时多数视频仍可下载，
+        但可能缺少高分辨率格式。
+      </p>
+
+      {#if !settingsPage.denoReady}
+        <button type="button" class="btn-link" onclick={() => settingsPage.openDenoDownload()}>
+          未找到 Deno？点击前往安装页面
+        </button>
+      {/if}
+
+      <div class="subpanel" style="background:var(--accent-soft); border:none; padding:12px 10px">
+        <span>{settingsPage.denoStatus}</span>
       </div>
     </div>
   </div>
