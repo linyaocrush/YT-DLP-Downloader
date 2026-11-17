@@ -90,11 +90,16 @@ impl ProcessRunner for TokioProcessRunner {
         cancellation: CancellationToken,
     ) -> Result<ProcessResult, ProcessError> {
         let mut command = Command::new(file_name);
+        if cancellation.is_cancelled() {
+            return Err(ProcessError::Cancelled);
+        }
+        let bounded = arguments.iter().any(|arg| arg == "--newline");
         command
             .args(arguments)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        command.kill_on_drop(true);
 
         // Keep console windows from flashing when the GUI launches yt-dlp.
         #[cfg(windows)]
@@ -106,14 +111,12 @@ impl ProcessRunner for TokioProcessRunner {
         let stdout_buffer = Arc::new(Mutex::new(String::new()));
         let stderr_buffer = Arc::new(Mutex::new(String::new()));
 
-        let stdout_task = child
-            .stdout
-            .take()
-            .map(|stream| tokio::spawn(pump(stream, on_stdout, Arc::clone(&stdout_buffer))));
-        let stderr_task = child
-            .stderr
-            .take()
-            .map(|stream| tokio::spawn(pump(stream, on_stderr, Arc::clone(&stderr_buffer))));
+        let stdout_task = child.stdout.take().map(|stream| {
+            tokio::spawn(pump(stream, on_stdout, Arc::clone(&stdout_buffer), bounded))
+        });
+        let stderr_task = child.stderr.take().map(|stream| {
+            tokio::spawn(pump(stream, on_stderr, Arc::clone(&stderr_buffer), bounded))
+        });
 
         // Only the wait branch touches `child`; the cancellation branch merely
         // sets a flag, so the mutable borrow of `child` is released afterwards.
@@ -151,8 +154,12 @@ impl ProcessRunner for TokioProcessRunner {
     }
 }
 
-async fn pump<R>(reader: R, callback: Option<LineCallback>, buffer: Arc<Mutex<String>>)
-where
+async fn pump<R>(
+    reader: R,
+    callback: Option<LineCallback>,
+    buffer: Arc<Mutex<String>>,
+    bounded: bool,
+) where
     R: AsyncRead + Unpin + Send + 'static,
 {
     let mut lines = BufReader::new(reader).lines();
@@ -160,6 +167,13 @@ where
         if let Ok(mut guard) = buffer.lock() {
             guard.push_str(&line);
             guard.push('\n');
+            if bounded && guard.len() > 256 * 1024 {
+                let mut start = guard.len() - 128 * 1024;
+                while !guard.is_char_boundary(start) {
+                    start += 1;
+                }
+                guard.drain(..start);
+            }
         }
         if let Some(callback) = &callback {
             callback(&line);

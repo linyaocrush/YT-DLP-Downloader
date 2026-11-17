@@ -103,3 +103,42 @@ fn save_raises_changed_event() {
 
     assert_eq!(raised.load(Ordering::SeqCst), 2);
 }
+
+#[test]
+fn failed_atomic_save_preserves_original_and_does_not_notify() {
+    let temp = TempDir::new();
+    let service = FileSettingsService::new(Some(temp.path().to_path_buf()));
+    service.try_save().unwrap();
+    let original = fs::read(service.file_path()).unwrap();
+    let mut permissions = fs::metadata(service.file_path()).unwrap().permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(service.file_path(), permissions.clone()).unwrap();
+    let raised = Arc::new(AtomicUsize::new(0));
+    let sink = raised.clone();
+    service.subscribe(Arc::new(move || {
+        sink.fetch_add(1, Ordering::SeqCst);
+    }));
+    service.update(&mut |settings| settings.download_threads = 12);
+    assert!(service.try_save().is_err());
+    assert_eq!(fs::read(service.file_path()).unwrap(), original);
+    assert_eq!(raised.load(Ordering::SeqCst), 0);
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(false);
+    fs::set_permissions(service.file_path(), permissions).unwrap();
+}
+
+#[test]
+fn corrupted_configuration_has_recoverable_backup() {
+    let temp = TempDir::new();
+    let broken = b"{ invalid config";
+    fs::write(temp.path().join("settings.json"), broken).unwrap();
+    let service = FileSettingsService::new(Some(temp.path().to_path_buf()));
+    assert!(service.load_warning().unwrap().contains("备份"));
+    service.try_save().unwrap();
+    let backup = fs::read_dir(temp.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .find(|entry| entry.file_name().to_string_lossy().contains("corrupt-"))
+        .unwrap();
+    assert_eq!(fs::read(backup.path()).unwrap(), broken);
+}

@@ -4,12 +4,14 @@
 // (arg building, JSON parsing, process handling) stays in Rust.
 
 import * as api from "./api";
+import { previewLinks, linkKey } from "./importLinks";
 import { settingsStore } from "./store.svelte";
 import {
   EXTENSION_TOKEN,
   RESOLUTION_CATALOG,
   TEMPLATE_FIELD_CATALOG,
   type AudioSourceDto,
+  type AppSettings,
   type CommandError,
   type CookieListingDto,
   type DownloadKind,
@@ -33,6 +35,7 @@ export type QueueItemState =
   | "Cancelled";
 
 export interface QueueItem {
+  savedRequest?: DownloadRequestDto;
   id: number;
   url: string;
   title: string;
@@ -94,10 +97,12 @@ export function itemSelectionInfo(item: QueueItem): string {
 }
 
 export function hasValidManualSelection(item: QueueItem, kind: DownloadKind): boolean {
-  if (kind === "VideoOnly") return item.selectedVideo !== null;
-  if (kind === "AudioOnly") return item.selectedAudio !== null;
+  const videoValid = item.selectedVideo !== null && item.videos.some(v => v.formatId === item.selectedVideo?.formatId);
+  const audioValid = item.selectedAudio !== null && item.audios.some(a => a.formatId === item.selectedAudio?.formatId);
+  if (kind === "VideoOnly") return videoValid;
+  if (kind === "AudioOnly") return audioValid;
   return (
-    item.selectedVideo !== null && (item.selectedVideo.hasAudio || item.selectedAudio !== null)
+    videoValid && (item.selectedVideo!.hasAudio || audioValid)
   );
 }
 
@@ -119,7 +124,7 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
-class DownloadStore {
+export class DownloadStore {
   // --- URL / parse result -------------------------------------------------
   url = $state("");
   hasMediaInfo = $state(false);
@@ -175,6 +180,27 @@ class DownloadStore {
   // --- internal -----------------------------------------------------------
   defaultDirectory = $state("");
   private nextId = 1;
+  private stopRequested = false;
+  private parseRevision = 0;
+  private activeJobId: number | null = null;
+  private lastJobId = 0;
+  private runTargetIds: number[] = [];
+  private completedTargetIds = new Set<number>();
+  private queueSaveChain: Promise<void> = Promise.resolve();
+  private queueLoaded = false;
+  lastOutputPath = $state<string | null>(null);
+  importText = $state("");
+  keepDuplicates = $state(false);
+  saveLog = $state(false);
+  get importPreview() { return previewLinks(this.importText, this.queue.map(item => item.url)); }
+
+  importLinks(): void {
+    const entries = this.importPreview.filter(entry => entry.status === "valid" || (entry.status === "duplicate" && this.keepDuplicates));
+    for (const entry of entries) this.queue.push(this.makeItem(entry.url));
+    this.statusText = `已导入 ${entries.length} 个链接`;
+    this.importText = "";
+    void this.persistQueue();
+  }
   private currentItemId: number | null = null;
   private queueIndex = 0;
   private queueTotal = 0;
@@ -185,6 +211,12 @@ class DownloadStore {
   // ------------------------------------------------------------------ setup
 
   async initialize(): Promise<void> {
+    try {
+      this.queue = await api.loadQueue() as QueueItem[];
+      this.queueLoaded = true;
+      this.nextId = Math.max(0, ...this.queue.map(item => item.id)) + 1;
+      if (this.queue.length) this.statusText = `已恢复 ${this.queue.length} 个任务（包含下载历史），手动格式需重新解析选择。`;
+    } catch (error) { this.statusText = errorMessage(error); }
     this.defaultDirectory = await api.defaultDownloadDir();
     this.initializeTemplateFields();
     this.selectedCookiePath = settingsStore.value.CookieFile || null;
@@ -220,6 +252,7 @@ class DownloadStore {
       // keep the current selection
     } else {
       this.selectedCookiePath = null;
+      if (saved) await settingsStore.set("CookieFile", "");
     }
   }
 
@@ -228,13 +261,13 @@ class DownloadStore {
    * does: rebuild the cookie list when the folder changed, always re-check the
    * proxy indicator, and re-resolve yt-dlp.
    */
-  onSettingsChanged(): void {
+  onSettingsChanged(keys: (keyof AppSettings)[] = []): void {
     const folder = settingsStore.value.CookieFolder ?? "";
     if (folder.toLowerCase() !== this.lastCookieFolder.toLowerCase()) {
       void this.refreshCookieListing();
     }
-    void this.refreshProxyIndicator();
-    void this.refreshYtDlpStatus();
+    if (keys.some(key => key.startsWith("Proxy"))) void this.refreshProxyIndicator();
+    if (keys.includes("YtDlpPath")) void this.refreshYtDlpStatus();
   }
 
   // ------------------------------------------------------------- persisted getters
@@ -498,6 +531,7 @@ class DownloadStore {
   // ------------------------------------------------------------- field setters
 
   setUrl(value: string): void {
+    this.parseRevision += 1;
     if (this.url === value) return;
     this.url = value;
     this.clearParseResult();
@@ -521,6 +555,12 @@ class DownloadStore {
 
   setManualMode(manual: boolean): void {
     this.isManualMode = manual;
+    for (const item of this.queue) {
+      if (item.state !== "Completed" && item.savedRequest) {
+        item.savedRequest.auto = !manual;
+        item.savedRequest.manual = null;
+      }
+    }
     if (manual) this.ensureActiveSelection();
   }
 
@@ -624,17 +664,25 @@ class DownloadStore {
   }
 
   async parse(): Promise<void> {
+    if (this.isBusy) return;
+    this.activeJobId = null;
+    await settingsStore.flush();
+    if (settingsStore.error) { this.statusText = settingsStore.error; return; }
+    this.stopRequested = false;
     if (this.isQueueMode) {
       await this.parseQueue();
       return;
     }
 
+    const revision = ++this.parseRevision;
+    const url = this.url.trim();
     this.isBusy = true;
     this.statusText = "正在解析视频信息…";
 
     let playlist: PlaylistInfoDto | null = null;
     try {
-      const result = await api.parseMedia(this.url.trim());
+      const result = await api.parseMedia(url, this.selectedCookiePath);
+      if (revision !== this.parseRevision || this.stopRequested) return;
       if (result.playlist) {
         playlist = result.playlist;
       } else if (result.media) {
@@ -646,9 +694,10 @@ class DownloadStore {
       this.statusText = isCancelled(error) ? "解析已取消" : parseErrorMessage(error);
     } finally {
       this.isBusy = false;
+      await this.persistQueue();
     }
 
-    if (!playlist) return;
+    if (!playlist || this.stopRequested) return;
 
     if (playlist.entries.length === 0) {
       this.statusText = `解析失败：播放列表“${playlist.title}”中没有可下载的视频。`;
@@ -690,6 +739,7 @@ class DownloadStore {
   private expandPlaylistToQueue(playlist: PlaylistInfoDto): void {
     for (const entry of playlist.entries) {
       if (!entry.url.trim()) continue;
+      if (this.queue.some(item => linkKey(item.url) === linkKey(entry.url))) continue;
       this.queue.push(this.makeItem(entry.url, entry.title));
     }
 
@@ -722,6 +772,8 @@ class DownloadStore {
     item.error = null;
     item.videos = info.videos;
     item.audios = info.audios;
+    item.selectedVideo = info.videos.find(v => v.formatId === item.selectedVideo?.formatId) ?? null;
+    item.selectedAudio = info.audios.find(a => a.formatId === item.selectedAudio?.formatId) ?? null;
 
     const postLive = info.liveStatus?.toLowerCase() === "post_live";
     if (postLive && info.videos.length === 0 && info.audios.length === 0) {
@@ -750,13 +802,15 @@ class DownloadStore {
 
     try {
       for (let index = 0; index < targets.length; index += 1) {
+        if (this.stopRequested) throw { kind: "cancelled" };
         const item = targets[index];
         this.queueProgressText = `解析 ${index + 1} / ${targets.length}`;
         this.statusText = `正在解析第 ${index + 1} / ${targets.length} 个：${item.url}`;
         item.state = "Parsing";
 
         try {
-          const info = await api.getMediaInfo(item.url);
+          const info = await api.getMediaInfo(item.url, this.selectedCookiePath);
+          if (this.stopRequested) throw { kind: "cancelled" };
           if (info.isUpcoming) {
             item.error = "预约直播尚未开始";
             item.state = "Failed";
@@ -782,6 +836,7 @@ class DownloadStore {
       this.isProgressVisible = false;
       this.queueProgressText = "";
       this.isBusy = false;
+      await this.persistQueue();
     }
   }
 
@@ -792,7 +847,7 @@ class DownloadStore {
   /// downloadable yet (post-live replay still being generated).
   private async refreshLiveState(url: string, item?: QueueItem): Promise<boolean> {
     try {
-      const info = await api.getMediaInfo(url);
+      const info = await api.getMediaInfo(url, this.selectedCookiePath);
       const postLive = info.liveStatus?.toLowerCase() === "post_live";
       const hasFormats = info.videos.length > 0 || info.audios.length > 0;
 
@@ -831,105 +886,38 @@ class DownloadStore {
         }
         return false;
       }
-    } catch {
+    } catch (error) {
+      if (isCancelled(error) || this.stopRequested) throw { kind: "cancelled" };
       // Keep the previous state; the actual download will surface the error.
     }
     return true;
   }
 
   async download(): Promise<void> {
+    if (this.isBusy) return;
+    this.activeJobId = null;
+    await settingsStore.flush();
+    if (settingsStore.error) { this.statusText = settingsStore.error; return; }
+    this.stopRequested = false;
     if (this.isQueueMode) {
       await this.downloadQueue();
       return;
     }
 
-    if (this.isLive && !(await this.refreshLiveState(this.url.trim()))) {
-      return;
-    }
-
-    this.isBusy = true;
-    this.progress = 0;
-    this.isProgressVisible = true;
-    this.speedText = "";
-    this.etaText = "";
-    this.logs = [];
-    this.statusText = this.isLive
-      ? "开始直播下载（从头录制，使用 MPEG-TS 容器；直播结束前请保持程序运行）…"
-      : this.autoStatusText();
-    this.startTaskbar();
-
-    let success = false;
-    let cancelled = false;
-    let error: string | null = null;
-    let outputPath: string | null = null;
-
-    this.currentItemId = null;
-
-    try {
-      const outcome = await api.startDownload(
-        this.buildRequest(
-          this.url.trim(),
-          this.selectedVideo,
-          this.selectedAudio,
-          this.isManualMode && this.manualSelectionValid,
-          this.buildOutputTemplate(),
-        ),
-      );
-
-      if (outcome.cancelled) {
-        cancelled = true;
-        this.statusText = "下载已取消";
-      } else if (outcome.success) {
-        success = true;
-        outputPath = outcome.outputPath;
-        this.statusText = outputPath ? `下载完成：${outputPath}` : "下载完成";
-      } else {
-        error = outcome.error ?? "未知错误";
-        this.statusText = `下载失败：${error}`;
-        this.appendLog(error);
-      }
-    } catch (caught) {
-      if (isCancelled(caught)) {
-        cancelled = true;
-        this.statusText = "下载已取消";
-      } else {
-        error = errorMessage(caught);
-        this.statusText = `下载失败：${error}`;
-      }
-    } finally {
-      this.isProgressVisible = false;
-      this.isBusy = false;
-    }
-
-    this.finishTaskbar(success, cancelled);
-    this.notifyFinished(success, cancelled, error, outputPath, this.videoTitle, this.url.trim());
+    // Single downloads use the same durable scheduler and history as batch tasks.
+    const item = this.makeItem(this.url.trim(), this.videoTitle);
+    item.videos = this.videos;
+    item.audios = this.audios;
+    item.selectedVideo = this.selectedVideo;
+    item.selectedAudio = this.selectedAudio;
+    item.isLive = this.isLive;
+    this.queue.push(item);
+    await this.downloadQueue([item.id]);
   }
 
-  private autoStatusText(): string {
-    if (!this.isAutoMode) return `开始下载（格式 ${this.manualExpression()}）…`;
-    switch (this.downloadKind) {
-      case "VideoOnly":
-        return "开始下载（仅视频，自动选择最高画质）…";
-      case "AudioOnly":
-        return "开始下载（仅音频，自动选择最高音质）…";
-      default:
-        return "开始下载（自动选择最佳质量并合成）…";
-    }
-  }
-
-  private manualExpression(): string {
-    if (this.downloadKind === "VideoOnly") return this.selectedVideo?.formatId ?? "";
-    if (this.downloadKind === "AudioOnly") return this.selectedAudio?.formatId ?? "";
-
-    const video = this.selectedVideo;
-    if (!video) return "";
-    return video.hasAudio
-      ? video.formatId
-      : `${video.formatId}+${this.selectedAudio?.formatId ?? ""}`;
-  }
-
-  private async downloadQueue(): Promise<void> {
-    const targets = this.queue.filter((item) =>
+  private async downloadQueue(ids?: number[]): Promise<void> {
+    this.activeJobId = null;
+    const targets = this.queue.filter((item) => (!ids || ids.includes(item.id)) &&
       ["Pending", "Parsed", "Failed", "Cancelled"].includes(item.state),
     );
     if (targets.length === 0) {
@@ -937,8 +925,14 @@ class DownloadStore {
       return;
     }
 
-    const template =
-      this.isFixedNameMode && targets.length > 1 ? null : this.buildOutputTemplate();
+    if (this.isManualMode || targets.some(item => item.savedRequest?.auto === false)) {
+      const invalid = targets.filter(item => (item.savedRequest ? !item.savedRequest.auto : this.isManualMode) && !hasValidManualSelection(item, item.savedRequest?.kind ?? this.downloadKind));
+      if (invalid.length) {
+        this.statusText = `以下任务缺少有效手动选流，请先解析并选择，或切换自动模式：${invalid.map(item => item.title).join("、")}`;
+        return;
+      }
+    }
+    const template = this.buildOutputTemplate();
 
     this.isBusy = true;
     this.progress = 0;
@@ -949,70 +943,37 @@ class DownloadStore {
     this.startTaskbar();
 
     this.queueTotal = targets.length;
+    this.runTargetIds = targets.map(item => item.id);
+    this.completedTargetIds.clear();
     let completed = 0;
     let failed = 0;
     let cancelled = false;
 
     try {
-      for (let index = 0; index < targets.length; index += 1) {
-        const item = targets[index];
-        this.queueProgressText = `下载 ${index + 1} / ${targets.length}`;
-        this.statusText = `正在下载第 ${index + 1} / ${targets.length} 个：${item.title}`;
-
-        item.state = "Downloading";
-        item.progress = 0;
-        item.error = null;
-        this.progress = 0;
-        this.queueIndex = index;
-        this.currentItemId = item.id;
-
-        if (item.isLive && !(await this.refreshLiveState(item.url, item))) {
-          failed += 1;
-          this.notifyFinished(false, false, item.error, null, item.title, item.url);
-          continue;
-        }
-
-        const useManual = this.isManualMode && hasValidManualSelection(item, this.downloadKind);
-        const request = this.buildRequest(
-          item.url,
-          item.selectedVideo,
-          item.selectedAudio,
-          useManual,
-          template,
+      const requests = targets.map((item, index) => {
+        const request = item.savedRequest ? { ...item.savedRequest, cookieFile: this.selectedCookiePath } : this.buildRequest(
+          item.url, item.selectedVideo, item.selectedAudio, this.isManualMode,
+          this.isFixedNameMode && targets.length > 1 ? `${this.fixedFileName.trim()} - ${String(index + 1).padStart(3, "0")}.${EXTENSION_TOKEN}` : template,
         );
-        request.live = item.isLive;
-
-        try {
-          const outcome = await api.startDownload(request);
-          if (outcome.cancelled) {
-            cancelled = true;
-            item.state = "Cancelled";
-            this.notifyFinished(false, true, null, null, item.title, item.url);
-          } else if (outcome.success) {
-            completed += 1;
-            item.outputPath = outcome.outputPath;
-            item.progress = 100;
-            item.state = "Completed";
-            this.notifyFinished(true, false, null, outcome.outputPath, item.title, item.url);
-          } else {
-            failed += 1;
-            item.error = outcome.error ?? null;
-            item.state = "Failed";
-            this.notifyFinished(false, false, item.error, null, item.title, item.url);
-          }
-        } catch (caught) {
-          if (isCancelled(caught)) {
-            item.state = "Cancelled";
-            throw caught;
-          }
-          failed += 1;
-          item.error = errorMessage(caught);
-          item.state = "Failed";
-          this.notifyFinished(false, false, item.error, null, item.title, item.url);
+        if (!request.auto) {
+        request.manual = { videoFormatId: request.kind === "AudioOnly" ? null : item.selectedVideo?.formatId ?? null, videoHasAudio: item.selectedVideo?.hasAudio ?? false, audioFormatId: request.kind === "VideoOnly" || item.selectedVideo?.hasAudio ? null : item.selectedAudio?.formatId ?? null };
         }
+        request.live = item.isLive;
+        item.savedRequest = request;
+        return { itemId: item.id, request };
+      });
+      await this.queueSaveChain;
+      await api.saveQueue(this.queue);
+      if (this.stopRequested) throw {kind: "cancelled"};
+      const outcome = await api.startQueue(requests);
+      const persisted = await api.loadQueue() as QueueItem[];
+      for (const saved of persisted) {
+        const local = this.queue.find(item => item.id === saved.id);
+        if (local) Object.assign(local, saved);
       }
-
-      this.statusText = `队列下载完成：成功 ${completed} 个，失败 ${failed} 个。`;
+      completed = outcome.completed; failed = outcome.failed; cancelled = outcome.cancelled;
+      this.statusText = cancelled ? "队列已停止，剩余任务已保留。" : `队列下载完成：成功 ${completed} 个，失败 ${failed} 个。`;
+      if (!cancelled) void api.notify("队列下载完成", this.statusText);
     } catch (caught) {
       cancelled = isCancelled(caught);
       this.statusText = cancelled ? "队列下载已取消" : `下载失败：${errorMessage(caught)}`;
@@ -1022,6 +983,8 @@ class DownloadStore {
       this.queueTotal = 0;
       this.currentItemId = null;
       this.isBusy = false;
+      this.activeJobId = null;
+      await this.persistQueue();
     }
 
     // Taskbar: show the aggregate result once the queue finished.
@@ -1048,11 +1011,16 @@ class DownloadStore {
         : null;
 
     return {
+      saveLog: this.saveLog,
+      cookieFile: this.selectedCookiePath,
       url,
       auto: !manual,
       kind: this.downloadKind,
       resolution: this.resolution,
-      manual: manualPayload,
+      manual: manualPayload && { ...manualPayload,
+        videoFormatId: this.downloadKind === "AudioOnly" ? null : manualPayload.videoFormatId,
+        audioFormatId: this.downloadKind === "VideoOnly" || manualPayload.videoHasAudio ? null : manualPayload.audioFormatId,
+      },
       outputDirectory: this.downloadDirectory.trim(),
       outputTemplate,
       writeThumbnail: this.writeThumbnail,
@@ -1065,8 +1033,13 @@ class DownloadStore {
   addToQueue(): void {
     const url = this.url.trim();
     if (!url) return;
+    if (!linkKey(url)) { this.statusText = "请输入有效的 HTTP / HTTPS 链接"; return; }
+    if (this.queue.some(item => linkKey(item.url) === linkKey(url))) {
+      this.statusText = "该链接已在队列中；如需保留重复项，请使用批量导入。"; return;
+    }
 
     this.queue.push(this.makeItem(url));
+    void this.persistQueue();
     this.url = "";
     this.statusText =
       this.queue.length === 1
@@ -1081,6 +1054,7 @@ class DownloadStore {
     this.selectedQueueItemId = null;
     this.queueProgressText = "";
     this.statusText = "已清空下载队列。";
+    void this.persistQueue();
   }
 
   removeQueueItem(id: number): void {
@@ -1088,12 +1062,22 @@ class DownloadStore {
     this.queue = this.queue.filter((item) => item.id !== id);
     if (this.selectedQueueItemId === id) this.selectedQueueItemId = null;
     if (this.queue.length === 0) this.statusText = "队列已空。";
+    void this.persistQueue();
   }
 
   // ------------------------------------------------------------- progress
 
   /** Handles one `download:update` event from the backend. */
   handleUpdate(update: DownloadUpdateDto): void {
+    if (!this.isBusy || update.jobId < this.lastJobId || (this.activeJobId !== null && this.activeJobId !== update.jobId)) return;
+    this.lastJobId = update.jobId;
+    this.activeJobId = update.jobId;
+    if (update.itemId !== null) this.currentItemId = update.itemId;
+    if (update.phase) {
+      const phase = update.phase.split(":")[0];
+      this.statusText = ({DownloadingVideo: "正在下载视频", DownloadingAudio: "正在下载音频", Processing: "正在合并 / 后处理", Completed: "文件已保存"} as Record<string,string>)[phase] ?? "正在下载";
+      if (update.elapsed !== null && update.downloadedBytes !== null) this.statusText += ` · ${Math.round(update.elapsed)} 秒 · ${(update.downloadedBytes / 1048576).toFixed(1)} MiB`;
+    }
     if (update.percent !== null && update.percent !== undefined) this.progress = update.percent;
     if (update.speed) this.speedText = update.speed;
     if (update.eta) this.etaText = update.eta;
@@ -1106,7 +1090,7 @@ class DownloadStore {
       }
       if (this.queueTotal > 0) {
         const itemPercent = update.percent ?? item?.progress ?? 0;
-        this.progress = ((this.queueIndex + itemPercent / 100) / this.queueTotal) * 100;
+        this.progress = ((this.completedTargetIds.size + itemPercent / 100) / this.queueTotal) * 100;
       }
     }
 
@@ -1114,8 +1098,66 @@ class DownloadStore {
   }
 
   cancel(): void {
+    this.stopRequested = true;
     this.statusText = "正在取消…";
-    void api.cancelJob();
+    void api.cancelJob(this.activeJobId);
+  }
+
+  handleQueueUpdate(update: {jobId: number; itemId: number; patch: Partial<QueueItem>}): void {
+    if (!this.isBusy || update.jobId < this.lastJobId || (this.activeJobId !== null && this.activeJobId !== update.jobId)) return;
+    this.activeJobId = update.jobId; this.lastJobId = update.jobId;
+    const item = this.queue.find(item => item.id === update.itemId);
+    if (item) Object.assign(item, update.patch);
+    if (update.patch.state === "Downloading") {
+      this.currentItemId = update.itemId;
+      this.queueIndex = this.runTargetIds.indexOf(update.itemId);
+      this.queueProgressText = `下载 ${this.queueIndex + 1} / ${this.queueTotal}`;
+      this.speedText = ""; this.etaText = "";
+    }
+    if (update.patch.state === "Completed" || update.patch.state === "Failed") {
+      this.completedTargetIds.add(update.itemId);
+      if (update.patch.outputPath) this.lastOutputPath = update.patch.outputPath;
+    }
+  }
+
+  async persistQueue(): Promise<void> {
+    if (!this.queueLoaded) return;
+    const snapshot = JSON.parse(JSON.stringify(this.queue)) as QueueItem[];
+    for (const item of snapshot) if (item.savedRequest) item.savedRequest.cookieFile = null;
+    const save = this.queueSaveChain.then(() => api.saveQueue(snapshot));
+    this.queueSaveChain = save.catch(error => { this.statusText = errorMessage(error); });
+    await this.queueSaveChain;
+  }
+
+  async retryItems(ids: number[]): Promise<void> {
+    if (this.isBusy) return;
+    await settingsStore.flush();
+    if (settingsStore.error) { this.statusText = settingsStore.error; return; }
+    this.stopRequested = false;
+    for (const item of this.queue.filter(item => ids.includes(item.id))) {
+      if (item.state === "Completed") item.state = "Pending";
+    }
+    await this.downloadQueue(ids);
+  }
+
+  async copyDiagnostics(): Promise<void> {
+    const sensitive = [this.selectedCookiePath, settingsStore.value.CookieFile].filter(Boolean) as string[];
+    let text = [this.statusText, ...this.queue.filter(item => item.error).map(item => `${item.title}: ${item.error}`), ...this.logs].join("\n");
+    for (const value of sensitive) text = text.split(value).join("[Cookie 文件已隐藏]");
+    text = text.replace(/(cookie|authorization|proxy-authorization)\s*[:=]\s*[^\r\n]+/gi, "$1: [已隐藏]").replace(/:\/\/[^/@\s]+:[^/@\s]+@/g, "://[已隐藏]@");
+    try { await navigator.clipboard.writeText(text); this.statusText = "诊断信息已复制"; }
+    catch (error) { this.statusText = `复制失败：${errorMessage(error)}`; }
+  }
+
+  async reveal(path: string | null): Promise<void> {
+    if (!path) return;
+    try { await api.revealPath(path); }
+    catch (error) { this.statusText = errorMessage(error); }
+  }
+
+  async openDirectory(): Promise<void> {
+    try { await api.openDirectory(this.downloadDirectory.trim() || this.defaultDirectory); }
+    catch (error) { this.statusText = errorMessage(error); }
   }
 
   private appendLog(line: string): void {

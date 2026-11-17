@@ -55,8 +55,16 @@ pub fn update_settings(
     state
         .settings
         .update(&mut |settings| *settings = updated.clone());
-    state.settings.save();
+    state
+        .settings
+        .try_save()
+        .map_err(|error| CommandError::io(format!("设置保存失败：{error}")))?;
     Ok(updated)
+}
+
+#[tauri::command]
+pub fn settings_warning(state: State<'_, AppState>) -> Option<String> {
+    state.settings.load_warning()
 }
 
 // ---------------------------------------------------------------------------
@@ -111,11 +119,19 @@ pub async fn detect_ytdlp(app: AppHandle) -> YtDlpDetectionDto {
         };
     };
 
-    let version = cli
-        .get_version(CancellationToken::new())
-        .await
-        .ok()
-        .flatten();
+    let timeout_token = CancellationToken::new();
+    let version = match tokio::time::timeout(
+        std::time::Duration::from_secs(8),
+        cli.get_version(timeout_token.clone()),
+    )
+    .await
+    {
+        Ok(result) => result.ok().flatten(),
+        Err(_) => {
+            timeout_token.cancel();
+            None
+        }
+    };
     let ready = version.is_some();
     let status_text = match &version {
         Some(version) => format!("已就绪 — yt-dlp {version}"),
@@ -203,11 +219,15 @@ async fn deno_version(path: &str) -> Option<String> {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    command.kill_on_drop(true);
 
     #[cfg(windows)]
     command.creation_flags(0x0800_0000);
 
-    let output = command.output().await.ok()?;
+    let output = tokio::time::timeout(std::time::Duration::from_secs(8), command.output())
+        .await
+        .ok()?
+        .ok()?;
     if !output.status.success() {
         return None;
     }
@@ -232,31 +252,50 @@ pub fn list_cookie_files(state: State<'_, AppState>) -> CookieListingDto {
     let exists = !folder.is_empty() && Path::new(&folder).is_dir();
 
     let mut files = Vec::new();
+    let mut scan_error = None;
+    let mut invalid = 0;
     if exists {
-        if let Ok(entries) = std::fs::read_dir(&folder) {
-            files = entries
-                .filter_map(|entry| entry.ok())
-                .filter(|entry| entry.path().is_file())
-                .map(|entry| {
-                    let path = entry.path();
-                    CookieFileDto {
-                        name: path
-                            .file_name()
-                            .map(|name| name.to_string_lossy().into_owned())
-                            .unwrap_or_default(),
-                        path: path.to_string_lossy().into_owned(),
-                    }
-                })
-                .collect();
-            files.sort_by_key(|file| file.name.to_lowercase());
+        match std::fs::read_dir(&folder) {
+            Ok(entries) => {
+                files = entries
+                    .filter_map(|entry| entry.ok())
+                    .filter(|entry| entry.path().is_file())
+                    .filter(|entry| {
+                        let valid = util::validate_cookie(&entry.path().to_string_lossy()).is_ok();
+                        if !valid {
+                            invalid += 1;
+                        }
+                        valid
+                    })
+                    .map(|entry| {
+                        let path = entry.path();
+                        CookieFileDto {
+                            name: path
+                                .file_name()
+                                .map(|name| name.to_string_lossy().into_owned())
+                                .unwrap_or_default(),
+                            path: path.to_string_lossy().into_owned(),
+                        }
+                    })
+                    .collect();
+                files.sort_by_key(|file| file.name.to_lowercase());
+            }
+            Err(error) => scan_error = Some(format!("无法读取 Cookie 文件夹：{error}")),
         }
     }
 
     let hint = if folder.is_empty() {
         "未设置 Cookie 文件夹。请到“设置”页选择一个文件夹，即可在此选择其中的 Cookie 文件。"
             .to_string()
+    } else if let Some(error) = scan_error {
+        error
+    } else if exists && files.is_empty() {
+        format!("未找到有效 Netscape Cookie 文件（忽略 {invalid} 个无效文件）。请将导出的 Cookie 放入该目录。")
     } else if exists {
-        "可选：用于需要登录或年龄限制的视频，从上方下拉列表选择 Cookie 文件。".to_string()
+        format!(
+            "找到 {} 个有效 Cookie 文件，忽略 {invalid} 个无效文件。",
+            files.len()
+        )
     } else {
         "Cookie 文件夹不存在，请到“设置”页重新选择。".to_string()
     };
@@ -272,29 +311,7 @@ pub fn list_cookie_files(state: State<'_, AppState>) -> CookieListingDto {
 
 #[tauri::command]
 pub fn cookie_folder_status(state: State<'_, AppState>) -> String {
-    let folder = state.settings.settings().cookie_folder.trim().to_string();
-
-    if folder.is_empty() {
-        return "未设置：下载页将不使用 Cookie。".to_string();
-    }
-    if !Path::new(&folder).is_dir() {
-        return "文件夹不存在，请重新选择。".to_string();
-    }
-
-    match std::fs::read_dir(&folder) {
-        Err(error) => format!("无法读取文件夹：{error}"),
-        Ok(entries) => {
-            let count = entries
-                .filter_map(|entry| entry.ok())
-                .filter(|entry| entry.path().is_file())
-                .count();
-            if count == 0 {
-                "该文件夹内未找到 Cookie 文件。".to_string()
-            } else {
-                format!("已识别 {count} 个 Cookie 文件，可在下载页的下拉列表中选择。")
-            }
-        }
-    }
+    list_cookie_files(state).hint
 }
 
 // ---------------------------------------------------------------------------
@@ -386,25 +403,32 @@ pub fn proxy_summary(state: State<'_, AppState>) -> String {
 
 /// Parses a URL that may be a single video or a playlist.
 #[tauri::command]
-pub async fn parse_media(app: AppHandle, url: String) -> Result<ParseResultDto, CommandError> {
+pub async fn parse_media(
+    app: AppHandle,
+    url: String,
+    cookie_file: Option<String>,
+) -> Result<ParseResultDto, CommandError> {
+    if let Some(path) = &cookie_file {
+        util::validate_cookie(path).map_err(CommandError::message)?;
+    }
+    let state = app.state::<AppState>();
+    let job = state.begin_job()?;
     let (cli, settings_service, cancellation) = {
         let state = app.state::<AppState>();
         (
             Arc::clone(&state.cli),
             Arc::clone(&state.settings),
-            state.begin_job(),
+            job.token.clone(),
         )
     };
 
     let settings = settings_service.settings();
-    let cookie = util::cookie_argument(&settings);
+    let cookie = cookie_file.filter(|value| !value.trim().is_empty());
     let proxy = util::proxy_argument(&settings, &url);
 
     let result = cli
         .get_media_or_playlist(&url, cookie.as_deref(), proxy.as_deref(), cancellation)
         .await;
-
-    app.state::<AppState>().end_job();
 
     let parsed = result?;
     Ok(ParseResultDto {
@@ -416,25 +440,32 @@ pub async fn parse_media(app: AppHandle, url: String) -> Result<ParseResultDto, 
 /// Parses one concrete video (used for each queue item). Unlike [`parse_media`]
 /// this never expands a playlist.
 #[tauri::command]
-pub async fn get_media_info(app: AppHandle, url: String) -> Result<MediaInfoDto, CommandError> {
+pub async fn get_media_info(
+    app: AppHandle,
+    url: String,
+    cookie_file: Option<String>,
+) -> Result<MediaInfoDto, CommandError> {
+    if let Some(path) = &cookie_file {
+        util::validate_cookie(path).map_err(CommandError::message)?;
+    }
+    let state = app.state::<AppState>();
+    let job = state.begin_job()?;
     let (cli, settings_service, cancellation) = {
         let state = app.state::<AppState>();
         (
             Arc::clone(&state.cli),
             Arc::clone(&state.settings),
-            state.begin_job(),
+            job.token.clone(),
         )
     };
 
     let settings = settings_service.settings();
-    let cookie = util::cookie_argument(&settings);
+    let cookie = cookie_file.filter(|value| !value.trim().is_empty());
     let proxy = util::proxy_argument(&settings, &url);
 
     let result = cli
         .get_media_info(&url, cookie.as_deref(), proxy.as_deref(), cancellation)
         .await;
-
-    app.state::<AppState>().end_job();
 
     Ok(MediaInfoDto::from(&result?))
 }
@@ -450,16 +481,30 @@ pub async fn start_download(
     app: AppHandle,
     request: DownloadRequestDto,
 ) -> Result<DownloadOutcomeDto, CommandError> {
+    let state = app.state::<AppState>();
+    let job = state.begin_job()?;
+    run_download(&app, request, job.id, job.token.clone(), None).await
+}
+
+pub(crate) async fn run_download(
+    app: &AppHandle,
+    request: DownloadRequestDto,
+    job_id: u64,
+    cancellation: CancellationToken,
+    item_id: Option<u64>,
+) -> Result<DownloadOutcomeDto, CommandError> {
     // Build the format expression before claiming the job slot so a validation
     // error cannot leave a stale token behind.
     let expression = build_expression(&request)?;
+    validate_request(&request)?;
+    let state = app.state::<AppState>();
 
     let (cli, settings_service, cancellation) = {
         let state = app.state::<AppState>();
         (
             Arc::clone(&state.cli),
             Arc::clone(&state.settings),
-            state.begin_job(),
+            cancellation.clone(),
         )
     };
 
@@ -471,25 +516,93 @@ pub async fn start_download(
     };
 
     let mut download = DownloadRequest::new(request.url.clone(), expression, directory);
-    download.cookie_file = util::cookie_argument(&settings);
+    std::fs::create_dir_all(&download.output_directory)
+        .map_err(|e| CommandError::io(format!("无法创建输出目录：{e}")))?;
+    let probe = Path::new(&download.output_directory).join(format!(".ytdlp-write-check-{job_id}"));
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .map_err(|e| CommandError::io(format!("输出目录不可写：{e}")))?;
+    drop(file);
+    std::fs::remove_file(probe)
+        .map_err(|e| CommandError::io(format!("无法清理目录检查文件：{e}")))?;
+    download.cookie_file = request.cookie_file.clone();
+    download.save_log = request.save_log;
     download.proxy_url = util::proxy_argument(&settings, &request.url);
-    download.concurrent_fragments = if settings.download_threads >= 1 {
-        settings.download_threads
-    } else {
-        4
-    };
+    download.concurrent_fragments = settings.download_threads.clamp(1, 64);
     download.output_template = request.output_template.clone();
     download.write_thumbnail = request.write_thumbnail;
     download.live = request.live;
+    let info = cli
+        .get_media_info(
+            &request.url,
+            request.cookie_file.as_deref(),
+            download.proxy_url.as_deref(),
+            cancellation.clone(),
+        )
+        .await?;
+    if info.is_upcoming {
+        return Err(CommandError::message("预约直播尚未开始，请稍后重试"));
+    }
+    download.live = info.is_live;
+    if info.videos.is_empty() && info.audios.is_empty() {
+        return Err(CommandError::message("当前没有可下载格式，请稍后重新解析"));
+    }
+    let needs_merge = expression_requires_ffmpeg(&download.format_expression);
+    if needs_merge {
+        let path = state
+            .ffmpeg_paths
+            .locate_in_path()
+            .or_else(|| state.ffmpeg_paths.configured_path())
+            .ok_or_else(|| CommandError::message("当前下载需要 ffmpeg 合并，请先在设置中配置"))?;
+        let mut command = tokio::process::Command::new(path);
+        command
+            .arg("-version")
+            .kill_on_drop(true)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(windows)]
+        command.creation_flags(0x0800_0000);
+        if !tokio::time::timeout(std::time::Duration::from_secs(8), command.status())
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .is_some_and(|status| status.success())
+        {
+            return Err(CommandError::message(
+                "ffmpeg 无法运行或检测超时，请检查安装",
+            ));
+        }
+    }
 
+    if !request.auto {
+        let selection = request
+            .manual
+            .as_ref()
+            .ok_or_else(|| CommandError::message("缺少手动选流"))?;
+        if selection
+            .video_format_id
+            .as_ref()
+            .is_some_and(|id| !info.videos.iter().any(|v| &v.format_id == id))
+            || selection
+                .audio_format_id
+                .as_ref()
+                .is_some_and(|id| !info.audios.iter().any(|a| &a.format_id == id))
+        {
+            return Err(CommandError::message("格式已变化，请重新解析并选择"));
+        }
+    }
     let emitter = app.clone();
     let progress: ProgressCallback = Arc::new(move |update: DownloadUpdate| {
-        let _ = emitter.emit(DOWNLOAD_UPDATE_EVENT, DownloadUpdateDto::from(update));
+        let mut dto = DownloadUpdateDto::from(update);
+        dto.job_id = job_id;
+        dto.item_id = item_id;
+        let _ = emitter.emit(DOWNLOAD_UPDATE_EVENT, dto);
     });
 
     let result = cli.download(download, Some(progress), cancellation).await;
-
-    app.state::<AppState>().end_job();
 
     let outcome = result?;
     Ok(DownloadOutcomeDto {
@@ -501,8 +614,13 @@ pub async fn start_download(
 }
 
 #[tauri::command]
-pub fn cancel_job(app: AppHandle) {
-    app.state::<AppState>().cancel_job();
+pub fn cancel_job(app: AppHandle, job_id: Option<u64>) {
+    app.state::<AppState>().cancel_job(job_id);
+}
+
+#[tauri::command]
+pub fn job_status(state: State<'_, AppState>) -> Option<crate::state::JobStatus> {
+    state.job_status()
 }
 
 /// Builds the yt-dlp `-f` value. Auto mode delegates to the core's
@@ -603,9 +721,66 @@ pub fn open_url(app: AppHandle, url: String) -> Result<(), CommandError> {
 
 #[tauri::command]
 pub fn reveal_path(app: AppHandle, path: String) -> Result<(), CommandError> {
+    if !Path::new(&path).exists() {
+        return Err(CommandError::message("文件不存在，可能已移动或删除"));
+    }
     app.opener()
         .reveal_item_in_dir(path)
         .map_err(|error| CommandError::io(error.to_string()))
+}
+
+pub(crate) fn validate_request(request: &DownloadRequestDto) -> Result<(), CommandError> {
+    url_check(&request.url)?;
+    if let Some(path) = &request.cookie_file {
+        util::validate_cookie(path).map_err(CommandError::message)?;
+    }
+    if let Some(template) = &request.output_template {
+        if template.trim().is_empty()
+            || template.contains(['/', '\\', '\0', '\n', '\r'])
+            || template.contains([':', '"', '<', '>', '|', '?', '*'])
+        {
+            return Err(CommandError::message(
+                "文件名不能为空，且不能包含路径分隔符或 Windows 无效字符",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn expression_requires_ffmpeg(expression: &str) -> bool {
+    expression.contains('+')
+}
+
+fn url_check(url: &str) -> Result<&str, CommandError> {
+    if !url::Url::parse(url).ok().is_some_and(|parsed| {
+        matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some()
+    }) {
+        return Err(CommandError::message("请输入有效的 HTTP / HTTPS 视频链接"));
+    }
+    Ok(url)
+}
+
+#[tauri::command]
+pub fn open_directory(app: AppHandle, path: String) -> Result<(), CommandError> {
+    if !Path::new(&path).is_dir() {
+        return Err(CommandError::message("输出目录不存在"));
+    }
+    app.opener()
+        .open_path(path, None::<String>)
+        .map_err(|error| CommandError::io(error.to_string()))
+}
+
+#[tauri::command]
+pub async fn prepare_exit(app: AppHandle) -> Result<(), CommandError> {
+    app.state::<AppState>().cancel_job(None);
+    for _ in 0..100 {
+        if app.state::<AppState>().job_status().is_none() {
+            app.exit(0);
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    Err(CommandError::message("任务仍在停止，请稍后再次关闭窗口"))
 }
 
 /// Windows toast notification (stand-in for the WPF tray balloon).

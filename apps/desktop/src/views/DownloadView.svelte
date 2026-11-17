@@ -5,6 +5,7 @@
   import Segmented from "../lib/components/Segmented.svelte";
   import Select from "../lib/components/Select.svelte";
   import Switch from "../lib/components/Switch.svelte";
+  import { settingsStore } from "../lib/store.svelte";
   import {
     downloadStore,
     itemSelectionInfo,
@@ -26,9 +27,18 @@
   const proxyColor = $derived(
     downloadStore.proxy.willApply ? "var(--proxy-on)" : "var(--proxy-off)",
   );
+
+  let importDialog: HTMLDialogElement;
+  let importInput: HTMLTextAreaElement;
+
+  function openImportDialog(): void {
+    if (downloadStore.isBusy || importDialog.open) return;
+    importDialog.showModal();
+    importInput.focus();
+  }
 </script>
 
-<div class="page">
+<div class="page" onfocusout={() => void settingsStore.flush()}>
   <!-- 下载设置 -->
   <div class="card">
     <!-- 视频链接 -->
@@ -38,7 +48,11 @@
         type="text"
         class="grow"
         style="min-width:200px"
+        disabled={downloadStore.isBusy}
+        aria-label="视频链接"
+        placeholder="输入视频链接；双击弹出批量输入链接窗口"
         value={downloadStore.url}
+        ondblclick={openImportDialog}
         oninput={(event) => downloadStore.setUrl(event.currentTarget.value)}
       />
       <button
@@ -73,6 +87,7 @@
         oninput={(event) => downloadStore.setDownloadDirectory(event.currentTarget.value)}
       />
       <button type="button" class="btn" onclick={() => downloadStore.browseFolder()}>浏览…</button>
+      <button type="button" class="btn" onclick={() => downloadStore.openDirectory()}>打开目录</button>
     </div>
 
     <!-- 文件名 -->
@@ -120,6 +135,10 @@
         {/if}
 
         <p class="hint">{downloadStore.outputNameHint}</p>
+        <p class="hint">重名策略：跳过已存在文件，不覆盖；重试保留该任务首次使用的文件名与下载选项。</p>
+        {#if downloadStore.isFixedNameMode && downloadStore.queue.length > 1}
+          <p class="hint">批量文件名：{downloadStore.fixedFileName || "文件名"} - 001、002…（自动添加扩展名）</p>
+        {/if}
       </div>
     </div>
 
@@ -191,7 +210,7 @@
         disabled={!downloadStore.canCancel}
         onclick={() => downloadStore.cancel()}
       >
-        取消
+        停止{downloadStore.isQueueMode ? "队列" : "任务"}
       </button>
       <span class="muted" style="margin-left:16px">{downloadStore.ytDlpStatus}</span>
     </div>
@@ -356,6 +375,7 @@
   <!-- 状态 + 选择提示 -->
   <div class="status-line">
     <div class="grow">{downloadStore.statusText}</div>
+    {#if downloadStore.lastOutputPath}<button class="btn" onclick={() => downloadStore.reveal(downloadStore.lastOutputPath)}>定位文件</button>{/if}
     <div class="selection-hint">{downloadStore.selectionHint}</div>
   </div>
 
@@ -375,6 +395,7 @@
           <span class="semi" style="font-size:15px">下载队列</span>
           <span style="color:var(--accent); margin-left:12px">{downloadStore.queueProgressText}</span>
           <span class="grow"></span>
+          <button class="btn" disabled={downloadStore.isBusy || !downloadStore.queue.some(item => item.state === "Failed")} onclick={() => downloadStore.retryItems(downloadStore.queue.filter(item => item.state === "Failed").map(item => item.id))}>重试失败任务</button>
           <button
             type="button"
             class="btn"
@@ -413,6 +434,7 @@
                 <div class="muted ellipsis" style="font-size:12px; margin-top:3px">
                   {itemStatusText(item)}
                 </div>
+                {#if item.error}<details><summary>错误详情</summary><div style="user-select:text;overflow-wrap:anywhere">{item.error}</div></details>{/if}
                 {#if item.selectedVideo || item.selectedAudio}
                   <div class="ellipsis" style="font-size:12px; margin-top:3px; color:var(--accent)">
                     {itemSelectionInfo(item)}
@@ -434,6 +456,12 @@
               >
                 移除
               </button>
+              {#if item.outputPath}
+                <button class="btn" onclick={(event) => { event.stopPropagation(); void downloadStore.reveal(item.outputPath); }}>定位文件</button>
+              {/if}
+              {#if ["Failed", "Cancelled", "Completed"].includes(item.state)}
+                <button class="btn" disabled={downloadStore.isBusy} onclick={(event) => {event.stopPropagation(); void downloadStore.retryItems([item.id]);}}>{item.state === "Completed" ? "重新下载" : "重试"}</button>
+              {/if}
             </div>
           {/each}
         </div>
@@ -442,6 +470,18 @@
 
     <details class="logs">
       <summary>日志</summary>
+      <div class="form-row">
+        <Switch
+          checked={downloadStore.saveLog}
+          disabled={downloadStore.isBusy}
+          title="完整日志保存到输出目录"
+          onchange={(value) => (downloadStore.saveLog = value)}
+        />
+        <span class="muted" style="margin-left:4px; font-size:12.5px">
+          完整日志保存到输出目录（download-时间戳.log）
+        </span>
+      </div>
+      <button class="btn" onclick={() => downloadStore.copyDiagnostics()}>复制诊断信息</button>
       <div class="log" style="margin-top:8px">
         {#each downloadStore.logs as line, index (index)}
           <div class="log-line">{line}</div>
@@ -450,3 +490,86 @@
     </details>
   </div>
 </div>
+
+<dialog bind:this={importDialog} class="import-dialog" aria-labelledby="import-dialog-title" aria-describedby="import-dialog-description">
+  <div class="row">
+    <h2 id="import-dialog-title" class="card-title grow">批量输入链接</h2>
+    <button type="button" class="btn" aria-label="关闭批量输入链接窗口" onclick={() => importDialog.close()}>关闭</button>
+  </div>
+  <p id="import-dialog-description" class="subtitle">每行输入一个 HTTP / HTTPS 视频链接，确认后加入下载队列。</p>
+  <textarea
+    bind:this={importInput}
+    aria-label="批量视频链接，每行一个"
+    placeholder="每行一个 HTTP / HTTPS 视频链接"
+    bind:value={downloadStore.importText}
+    disabled={downloadStore.isBusy}
+  ></textarea>
+  {#if downloadStore.importText.trim()}
+    <div class="import-preview" aria-label="导入预览">
+      {#each downloadStore.importPreview as entry}
+        <div class="import-preview-line">
+          <span class="muted">{entry.status === "valid" ? "有效" : entry.status === "duplicate" ? "重复" : "无效"}</span> · {entry.url}
+        </div>
+      {/each}
+    </div>
+  {/if}
+  <div class="form-row">
+    <Switch
+      checked={downloadStore.keepDuplicates}
+      disabled={downloadStore.isBusy}
+      title="保留重复项"
+      onchange={(value) => (downloadStore.keepDuplicates = value)}
+    />
+    <span class="muted small">保留重复项</span>
+    <span class="grow"></span>
+    <button type="button" class="btn" onclick={() => importDialog.close()}>取消</button>
+    <button
+      type="button"
+      class="btn-primary"
+      disabled={downloadStore.isBusy || !downloadStore.importPreview.some(entry => entry.status === "valid" || entry.status === "duplicate" && downloadStore.keepDuplicates)}
+      onclick={() => { downloadStore.importLinks(); importDialog.close(); }}
+    >导入队列</button>
+  </div>
+</dialog>
+
+<style>
+  .import-dialog {
+    width: min(680px, calc(100vw - 40px));
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 20px;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.24);
+  }
+
+  .import-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .import-dialog textarea {
+    width: 100%;
+    min-height: 180px;
+    margin-top: 14px;
+    resize: vertical;
+  }
+
+  .import-preview {
+    max-height: 180px;
+    overflow: auto;
+    margin-top: 12px;
+    padding: 10px;
+    border: 1px solid var(--divider);
+    border-radius: 6px;
+    background: var(--list-bg);
+    user-select: text;
+  }
+
+  .import-preview-line {
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+  }
+</style>

@@ -94,7 +94,7 @@ class SettingsPageStore {
       ["所有文件 (*.*)", ["*"]],
     ]);
     if (!picked) return;
-    settingsStore.set("YtDlpPath", picked);
+    await settingsStore.set("YtDlpPath", picked);
     await this.refreshDetection();
   }
 

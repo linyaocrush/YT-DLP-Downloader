@@ -7,19 +7,26 @@
 import * as api from "./api";
 import { defaultSettings, type AppSettings, type AppTheme } from "./types";
 
-class SettingsStore {
+export class SettingsStore {
   value = $state<AppSettings>(defaultSettings());
+  error = $state("");
 
   private queue: Promise<void> = Promise.resolve();
-  private listeners = new Set<() => void>();
+  private listeners = new Set<(keys: (keyof AppSettings)[]) => void>();
+  private pending: Partial<AppSettings> = {};
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private waiters: (() => void)[] = [];
 
   async load(): Promise<void> {
     this.value = await api.getSettings();
+    this.warning = (await api.settingsWarning()) ?? "";
     this.notifyChange();
   }
 
   /** Registers a change listener; returns an unsubscribe function. */
-  onChange(listener: () => void): () => void {
+  warning = $state("");
+
+  onChange(listener: (keys: (keyof AppSettings)[]) => void): () => void {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
@@ -33,7 +40,7 @@ class SettingsStore {
    */
   patch(patch: Partial<AppSettings>): Promise<void> {
     this.setLocalPatch(patch);
-    return this.enqueue(patch);
+    return this.persist(patch);
   }
 
   /**
@@ -41,7 +48,22 @@ class SettingsStore {
    * should stay exactly as typed while a trimmed value is written to disk.
    */
   persist(patch: Partial<AppSettings>): Promise<void> {
-    return this.enqueue(patch);
+    Object.assign(this.pending, patch);
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => { void this.flush(); }, 400);
+    return new Promise(resolve => this.waiters.push(resolve));
+  }
+
+  async flush(): Promise<void> {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    const patch = this.pending;
+    const waiters = this.waiters;
+    this.pending = {};
+    this.waiters = [];
+    if (Object.keys(patch).length) await this.enqueue(patch);
+    else await this.queue;
+    for (const resolve of waiters) resolve();
   }
 
   /** Updates one field locally and persists it. */
@@ -62,15 +84,18 @@ class SettingsStore {
   private enqueue(patch: Partial<AppSettings>): Promise<void> {
     const run = this.queue
       .then(() => api.updateSettings(patch))
-      .then(() => undefined)
-      .catch(() => undefined)
-      .then(() => this.notifyChange());
+      .then(() => { this.error = ""; })
+      .catch((error) => {
+        this.pending = {...patch, ...this.pending};
+        this.error = `设置保存失败：${error?.message ?? String(error)}`;
+      })
+      .then(() => this.notifyChange(Object.keys(patch) as (keyof AppSettings)[]));
     this.queue = run;
     return run;
   }
 
-  private notifyChange(): void {
-    for (const listener of this.listeners) listener();
+  private notifyChange(keys: (keyof AppSettings)[] = []): void {
+    for (const listener of this.listeners) listener(keys);
   }
 }
 

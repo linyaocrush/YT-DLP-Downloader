@@ -88,6 +88,11 @@ export interface ParseResultDto {
 }
 
 export interface DownloadUpdateDto {
+  itemId: number | null;
+  phase: string | null;
+  downloadedBytes: number | null;
+  elapsed: number | null;
+  jobId: number;
   line: string | null;
   percent: number | null;
   outputPath: string | null;
@@ -109,6 +114,8 @@ export interface ManualSelectionDto {
 }
 
 export interface DownloadRequestDto {
+  saveLog: boolean;
+  cookieFile: string | null;
   url: string;
   auto: boolean;
   kind: DownloadKind;

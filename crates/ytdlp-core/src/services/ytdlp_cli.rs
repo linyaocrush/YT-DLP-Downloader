@@ -29,6 +29,9 @@ static MERGE_RE: LazyLock<Regex> =
 /// One incremental update reported while a download runs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DownloadUpdate {
+    pub phase: Option<String>,
+    pub downloaded_bytes: Option<u64>,
+    pub elapsed: Option<f64>,
     /// A plain yt-dlp log line when it carried no structured progress.
     pub line: Option<String>,
     /// Download percentage, clamped to `0..=100`.
@@ -111,6 +114,7 @@ impl std::error::Error for YtDlpError {
 /// Everything needed for one download invocation.
 #[derive(Debug, Clone)]
 pub struct DownloadRequest {
+    pub save_log: bool,
     pub url: String,
     pub format_expression: String,
     pub output_directory: String,
@@ -129,6 +133,7 @@ impl DownloadRequest {
         output_directory: impl Into<String>,
     ) -> Self {
         Self {
+            save_log: false,
             url: url.into(),
             format_expression: format_expression.into(),
             output_directory: output_directory.into(),
@@ -348,6 +353,9 @@ impl YtDlpCli {
                 "无法创建输出目录：{error}"
             )));
         }
+        if let Err(error) = tempfile::NamedTempFile::new_in(&request.output_directory) {
+            return Ok(DownloadOutcome::failed(format!("输出目录不可写：{error}")));
+        }
 
         let name_template = match request.output_template.as_deref().map(str::trim) {
             Some(template) if !template.is_empty() => template.to_string(),
@@ -360,6 +368,16 @@ impl YtDlpCli {
             "utf-8".to_string(),
             "--no-playlist".to_string(),
             "--newline".to_string(),
+            "--progress".to_string(),
+            "--progress-template".to_string(),
+            "download:__YTDLP_PROGRESS__%(progress)j|||%(info.vcodec)s|||%(info.format_id)s"
+                .to_string(),
+            "--progress-template".to_string(),
+            "postprocess:__YTDLP_POSTPROCESS__%(progress)j".to_string(),
+            "--print".to_string(),
+            "after_move:__YTDLP_FILE__%(filepath)j".to_string(),
+            "--no-simulate".to_string(),
+            "--no-overwrites".to_string(),
             "--no-warnings".to_string(),
             "-f".to_string(),
             request.format_expression.clone(),
@@ -396,7 +414,35 @@ impl YtDlpCli {
         arguments.push(request.url.clone());
 
         let tracking = Arc::new(Mutex::new(DownloadTracking::default()));
-        let on_line = build_line_handler(Arc::clone(&tracking), progress);
+        let handler = build_line_handler(Arc::clone(&tracking), progress);
+        let on_line: LineCallback = if request.save_log {
+            use std::io::Write;
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let log_path =
+                Path::new(&request.output_directory).join(format!("download-{stamp}.log"));
+            let file = std::fs::File::create(&log_path).map_err(YtDlpError::Io)?;
+            let log = Mutex::new(file);
+            let cookie = request.cookie_file.clone();
+            Arc::new(move |line: &str| {
+                let mut safe = line.to_string();
+                if let Some(path) = &cookie {
+                    safe = safe.replace(path, "[Cookie 文件已隐藏]");
+                }
+                let lower = safe.to_lowercase();
+                if lower.contains("authorization:") || lower.contains("cookie:") {
+                    safe = "[敏感请求头已隐藏]".into();
+                }
+                if let Ok(mut file) = log.lock() {
+                    let _ = writeln!(file, "{safe}");
+                }
+                handler(line);
+            })
+        } else {
+            handler
+        };
 
         let result = match self
             .run_process(
@@ -464,11 +510,77 @@ fn build_line_handler(
     progress: Option<ProgressCallback>,
 ) -> LineCallback {
     Arc::new(move |line: &str| {
-        let Some(progress) = progress.as_ref() else {
-            return;
-        };
+        let noop = |_: DownloadUpdate| {};
+        let progress: &dyn Fn(DownloadUpdate) = progress
+            .as_ref()
+            .map(|callback| callback.as_ref() as &dyn Fn(DownloadUpdate))
+            .unwrap_or(&noop);
 
         let trimmed = line.trim_end_matches('\r');
+        if let Some(json) = trimmed.strip_prefix("__YTDLP_FILE__") {
+            if let Ok(path) = serde_json::from_str::<String>(json) {
+                if let Ok(mut guard) = tracking.lock() {
+                    guard.final_path = Some(path.clone());
+                }
+                progress(DownloadUpdate {
+                    phase: Some("Completed".into()),
+                    downloaded_bytes: None,
+                    elapsed: None,
+                    line: None,
+                    percent: Some(100.0),
+                    output_path: Some(path),
+                    speed: None,
+                    eta: None,
+                });
+                return;
+            }
+        }
+        for (prefix, phase) in [
+            ("__YTDLP_PROGRESS__", "Downloading"),
+            ("__YTDLP_POSTPROCESS__", "Processing"),
+        ] {
+            if let Some(json) = trimmed.strip_prefix(prefix) {
+                let mut fields = json.splitn(3, "|||");
+                let json = fields.next().unwrap_or_default();
+                let codec = fields.next();
+                let stream_id = fields.next();
+                if let Ok(root) = serde_json::from_str::<serde_json::Value>(json) {
+                    let value = root.get("progress").unwrap_or(&root);
+                    let info = root.get("info").unwrap_or(&value["info_dict"]);
+                    let bytes = value["downloaded_bytes"].as_u64();
+                    let total = value["total_bytes"]
+                        .as_f64()
+                        .or_else(|| value["total_bytes_estimate"].as_f64());
+                    let percent = bytes
+                        .zip(total)
+                        .filter(|(_, total)| *total > 0.0)
+                        .map(|(bytes, total)| (bytes as f64 / total * 100.0).clamp(0.0, 100.0));
+                    let format_id = stream_id
+                        .or_else(|| info["format_id"].as_str())
+                        .unwrap_or_default();
+                    let stage = if phase == "Processing" {
+                        "Processing"
+                    } else if codec.or_else(|| info["vcodec"].as_str()) == Some("none") {
+                        "DownloadingAudio"
+                    } else {
+                        "DownloadingVideo"
+                    };
+                    progress(DownloadUpdate {
+                        phase: Some(format!("{stage}:{format_id}")),
+                        downloaded_bytes: bytes,
+                        elapsed: value["elapsed"].as_f64(),
+                        line: None,
+                        percent,
+                        output_path: None,
+                        speed: value["speed"]
+                            .as_f64()
+                            .map(|speed| format!("{:.2} MiB/s", speed / 1048576.0)),
+                        eta: value["eta"].as_f64().map(|eta| format!("{}s", eta as u64)),
+                    });
+                    return;
+                }
+            }
+        }
 
         if let Some(value) = PERCENT_RE
             .captures(trimmed)
@@ -485,6 +597,9 @@ fn build_line_handler(
                 .map(|group| group.as_str().trim().to_string());
 
             progress(DownloadUpdate {
+                phase: None,
+                downloaded_bytes: None,
+                elapsed: None,
                 line: None,
                 percent: Some(value.clamp(0.0, 100.0)),
                 output_path: None,
@@ -500,6 +615,9 @@ fn build_line_handler(
                 guard.final_path = Some(path.clone());
             }
             progress(DownloadUpdate {
+                phase: Some("Processing".into()),
+                downloaded_bytes: None,
+                elapsed: None,
                 line: None,
                 percent: None,
                 output_path: Some(path),
@@ -514,6 +632,9 @@ fn build_line_handler(
                 guard.last_destination = Some(path.clone());
             }
             progress(DownloadUpdate {
+                phase: None,
+                downloaded_bytes: None,
+                elapsed: None,
                 line: None,
                 percent: None,
                 output_path: Some(path),
@@ -524,6 +645,9 @@ fn build_line_handler(
         }
 
         progress(DownloadUpdate {
+            phase: None,
+            downloaded_bytes: None,
+            elapsed: None,
             line: Some(trimmed.to_string()),
             percent: None,
             output_path: None,
@@ -627,16 +751,15 @@ pub fn friendly_error(message: &str) -> String {
     }
 
     if lower.contains("requested format is not available") {
-        return "YouTube 未返回可用的视频/音频格式（格式可能已过期、cookie 失效，或该视频需要登录/地区权限）。请重新解析后再试。".to_string();
+        return format!("站点未返回所选视频/音频格式，可能已过期或需要登录 / 地区权限。请更新 Cookie 并重新解析。\n原始错误：{message}");
     }
 
     if lower.contains("this video is unavailable") || lower.contains("video unavailable") {
-        return "视频当前不可用：可能已被删除、设为私有、受地区限制，或需要登录后访问。"
-            .to_string();
+        return format!("视频当前不可用：可能已被删除、设为私有、受地区限制，或需要登录后访问。\n原始错误：{message}");
     }
 
     if lower.contains("sign in to confirm") || lower.contains("login required") {
-        return "YouTube 要求登录或人机验证，请更新 cookies 后重试。".to_string();
+        return format!("站点要求登录或人机验证，请更新 Cookie 后重试。\n原始错误：{message}");
     }
 
     if lower.contains("no supported javascript runtime") {

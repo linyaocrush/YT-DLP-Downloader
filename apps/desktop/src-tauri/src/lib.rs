@@ -3,6 +3,7 @@
 mod commands;
 mod dto;
 mod error;
+mod queue;
 mod state;
 mod util;
 
@@ -15,6 +16,7 @@ pub fn run() {
         .manage(state::AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
+            commands::settings_warning,
             commands::update_settings,
             commands::ytdlp_status,
             commands::detect_ytdlp,
@@ -29,10 +31,16 @@ pub fn run() {
             commands::get_media_info,
             commands::start_download,
             commands::cancel_job,
+            commands::job_status,
+            commands::prepare_exit,
+            queue::load_queue,
+            queue::save_queue,
+            queue::start_queue,
             commands::pick_file,
             commands::pick_folder,
             commands::open_url,
             commands::reveal_path,
+            commands::open_directory,
             commands::notify,
             commands::set_taskbar_progress,
             commands::set_window_theme,

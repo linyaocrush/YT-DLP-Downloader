@@ -146,7 +146,7 @@ pub struct ParseResultDto {
 
 /// Manual source selection, forwarded verbatim so the format expression is built
 /// in Rust (the exact C# rules live in `YtDlpFormat`).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualSelectionDto {
     pub video_format_id: Option<String>,
@@ -154,9 +154,12 @@ pub struct ManualSelectionDto {
     pub audio_format_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadRequestDto {
+    #[serde(default)]
+    pub save_log: bool,
+    pub cookie_file: Option<String>,
     pub url: String,
     /// True for auto selection; false to use `manual`.
     pub auto: bool,
@@ -175,6 +178,11 @@ pub struct DownloadRequestDto {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadUpdateDto {
+    pub item_id: Option<u64>,
+    pub phase: Option<String>,
+    pub downloaded_bytes: Option<u64>,
+    pub elapsed: Option<f64>,
+    pub job_id: u64,
     pub line: Option<String>,
     pub percent: Option<f64>,
     pub output_path: Option<String>,
@@ -185,6 +193,11 @@ pub struct DownloadUpdateDto {
 impl From<DownloadUpdate> for DownloadUpdateDto {
     fn from(update: DownloadUpdate) -> Self {
         Self {
+            job_id: 0,
+            item_id: None,
+            phase: update.phase,
+            downloaded_bytes: update.downloaded_bytes,
+            elapsed: update.elapsed,
             line: update.line,
             percent: update.percent,
             output_path: update.output_path,

@@ -618,6 +618,60 @@ async fn download_only_destination_uses_destination() {
 }
 
 #[tokio::test]
+async fn structured_final_path_is_tracked_without_progress_callback() {
+    let temp = TempDir::new();
+    let runner = Arc::new(FakeRunner::with_lines(
+        ok_process(),
+        &["__YTDLP_FILE__\"C:/out/最终文件.mkv\""],
+    ));
+    let cli = build_cli(
+        &runner,
+        &Arc::new(FakePaths::new(Some("yt-dlp.exe"))),
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
+    let outcome = cli
+        .download(
+            DownloadRequest::new("url", "bv", temp.path().to_string_lossy()),
+            None,
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(outcome.output_path.as_deref(), Some("C:/out/最终文件.mkv"));
+}
+
+#[tokio::test]
+async fn structured_progress_reports_audio_stage_bytes_and_elapsed() {
+    let temp = TempDir::new();
+    let runner = Arc::new(FakeRunner::with_lines(
+        ok_process(),
+        &[
+            r#"__YTDLP_PROGRESS__{"downloaded_bytes":50,"total_bytes":100,"elapsed":3.5,"speed":1048576,"eta":2}|||none|||140"#,
+        ],
+    ));
+    let cli = build_cli(
+        &runner,
+        &Arc::new(FakePaths::new(Some("yt-dlp.exe"))),
+        &Arc::new(FakeFfmpeg::new(None)),
+        &Arc::new(FakeParser::new(sample_media())),
+    );
+    let (progress, items) = recorder();
+    cli.download(
+        DownloadRequest::new("url", "ba", temp.path().to_string_lossy()),
+        Some(progress),
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    let items = items.lock().unwrap();
+    assert_eq!(items[0].phase.as_deref(), Some("DownloadingAudio:140"));
+    assert_eq!(items[0].percent, Some(50.0));
+    assert_eq!(items[0].downloaded_bytes, Some(50));
+    assert_eq!(items[0].elapsed, Some(3.5));
+}
+
+#[tokio::test]
 async fn download_progress_lines_report_percent_speed_eta() {
     let temp = TempDir::new();
     let runner = Arc::new(FakeRunner::with_lines(

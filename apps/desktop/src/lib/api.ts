@@ -23,6 +23,7 @@ import type {
 export const DOWNLOAD_UPDATE_EVENT = "download:update";
 
 export const getSettings = () => invoke<AppSettings>("get_settings");
+export const settingsWarning = () => invoke<string | null>("settings_warning");
 
 export const updateSettings = (patch: Partial<AppSettings>) =>
   invoke<AppSettings>("update_settings", { patch });
@@ -46,14 +47,19 @@ export const proxyIndicator = (url: string | null) =>
 
 export const proxySummary = () => invoke<string>("proxy_summary");
 
-export const parseMedia = (url: string) => invoke<ParseResultDto>("parse_media", { url });
+export const parseMedia = (url: string, cookieFile: string | null) => invoke<ParseResultDto>("parse_media", { url, cookieFile });
 
-export const getMediaInfo = (url: string) => invoke<MediaInfoDto>("get_media_info", { url });
+export const getMediaInfo = (url: string, cookieFile: string | null) => invoke<MediaInfoDto>("get_media_info", { url, cookieFile });
 
 export const startDownload = (request: DownloadRequestDto) =>
   invoke<DownloadOutcomeDto>("start_download", { request });
 
-export const cancelJob = () => invoke<void>("cancel_job");
+export const cancelJob = (jobId: number | null = null) => invoke<void>("cancel_job", { jobId });
+export const jobStatus = () => invoke<{jobId: number; cancelling: boolean} | null>("job_status");
+export const loadQueue = () => invoke<unknown[]>("load_queue");
+export const saveQueue = (items: unknown[]) => invoke<void>("save_queue", {items: JSON.parse(JSON.stringify(items))});
+export const startQueue = (requests: {itemId: number; request: DownloadRequestDto}[]) => invoke<{completed: number; failed: number; cancelled: boolean}>("start_queue", {requests});
+export const onQueueUpdate = (handler: (update: {jobId: number; itemId: number; patch: Record<string, unknown>}) => void) => listen<{jobId: number; itemId: number; patch: Record<string, unknown>}>("queue:update", event => handler(event.payload));
 
 export const pickFile = (title: string, filters: Array<[string, string[]]>) =>
   invoke<string | null>("pick_file", { title, filters });
@@ -63,6 +69,7 @@ export const pickFolder = (title: string) => invoke<string | null>("pick_folder"
 export const openUrl = (url: string) => invoke<void>("open_url", { url });
 
 export const revealPath = (path: string) => invoke<void>("reveal_path", { path });
+export const openDirectory = (path: string) => invoke<void>("open_directory", { path });
 
 export const notify = (title: string, body: string) =>
   invoke<void>("notify", { title, body });

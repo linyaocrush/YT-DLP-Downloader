@@ -27,7 +27,7 @@
   );
 </script>
 
-<div class="page">
+<div class="page" onfocusout={() => void settingsStore.flush()}>
   <h1 class="page-title">设置</h1>
 
   <!-- 外观 -->
