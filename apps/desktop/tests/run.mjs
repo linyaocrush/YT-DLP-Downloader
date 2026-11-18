@@ -27,6 +27,8 @@ function load(name, file, runes = false) {
     if (path === "./types") return modules.get("types");
     if (path === "./store.svelte") return modules.get("store");
     if (path === "./importLinks") return modules.get("links");
+    if (path === "./logBuffer.svelte") return modules.get("logBuffer");
+    if (path === "./queuePersistence") return modules.get("queuePersistence");
     if (path === "svelte/internal/client") return {
       state: value => ({value}), get: signal => signal.value,
       set: (signal, value) => { signal.value = value; return value; },
@@ -43,6 +45,8 @@ globalThis.window = {setTimeout, clearTimeout};
 load("types", "../src/lib/types.ts");
 const {previewLinks} = load("links", "../src/lib/importLinks.ts");
 const {SettingsStore, settingsStore} = load("store", "../src/lib/store.svelte.ts", true);
+const {LogBuffer} = load("logBuffer", "../src/lib/logBuffer.svelte.ts", true);
+const {QueuePersistence} = load("queuePersistence", "../src/lib/queuePersistence.ts");
 const {DownloadStore} = load("download", "../src/lib/download.svelte.ts", true);
 
 async function test(name, run) {
@@ -59,6 +63,41 @@ await test("Cookie 清空同步保存，任务显式传入无 Cookie", async () 
   assert.equal(store.selectedCookiePath, null);
   assert.equal(settingsStore.value.CookieFile, "");
   assert.equal(store.buildRequest("https://example.com/v", null, null, false, null).cookieFile, null);
+});
+
+await test("日志缓冲完整追加并可清空", async () => {
+  const buffer = new LogBuffer();
+  buffer.append("第一行");
+  buffer.append("第二行");
+  assert.equal(buffer.text, "第一行\n第二行\n");
+  buffer.clear();
+  assert.equal(buffer.text, "");
+});
+
+await test("队列保存合并更新并支持强制 flush", async () => {
+  const saved = [];
+  const persistence = new QueuePersistence(async snapshot => saved.push(snapshot), 1000);
+  persistence.schedule([1]);
+  persistence.schedule([2]);
+  assert.equal(saved.length, 0);
+  await persistence.flush();
+  assert.deepEqual(saved, [[2]]);
+});
+
+await test("队列保存错误可通过回调观察", async () => {
+  let observed = null;
+  let shouldFail = true;
+  const saved = [];
+  const persistence = new QueuePersistence(async snapshot => {
+    if (shouldFail) throw new Error("保存失败");
+    saved.push(snapshot);
+  }, 1000, error => { observed = error; });
+  persistence.schedule([1]);
+  await assert.rejects(() => persistence.flush(), /保存失败/);
+  assert.equal(observed.message, "保存失败");
+  shouldFail = false;
+  await persistence.flush();
+  assert.deepEqual(saved, [[1]]);
 });
 
 await test("设置输入合并写入，flush 保存最终值", async () => {

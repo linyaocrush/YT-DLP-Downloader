@@ -24,6 +24,7 @@ jobs:
         working-directory: apps/desktop
       - run: npm run build
         working-directory: apps/desktop
+      - run: cargo build -p ytdlp-downloader-desktop --features custom-protocol --locked
       - run: cargo fmt --all -- --check
       - run: cargo test --workspace --locked
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings

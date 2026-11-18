@@ -77,7 +77,7 @@ impl YtDlpPathService for PathYtDlpService {
         let found = self.locate_in_path()?;
         self.settings
             .update(&mut |settings| settings.yt_dlp_path = found.clone());
-        self.settings.save();
+        let _ = self.settings.save();
         Some(found)
     }
 }

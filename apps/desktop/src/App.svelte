@@ -24,7 +24,7 @@
         try {
           await settingsStore.flush();
           if (settingsStore.error) throw {message: settingsStore.error};
-          if (!downloadStore.isBusy) await downloadStore.persistQueue();
+          if (!downloadStore.isBusy) await downloadStore.persistQueue(true);
           await invoke("prepare_exit");
         } catch (error) { downloadStore.statusText = `退出失败：${(error as {message?: string})?.message ?? String(error)}`; }
       });

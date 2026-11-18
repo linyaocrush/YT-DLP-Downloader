@@ -40,7 +40,7 @@ fn save_then_reload_round_trips_persisted_values() {
         settings.proxy_list_mode = ProxyListMode::Blacklist;
         settings.proxy_sites.push("youtube.com".to_string());
     });
-    first.save();
+    first.save().unwrap();
 
     let reloaded = FileSettingsService::new(Some(temp.path().to_path_buf()));
     let settings = reloaded.settings();
@@ -64,7 +64,7 @@ fn save_writes_enums_as_strings() {
         settings.download_kind = DownloadKind::AudioOnly;
     });
 
-    service.save();
+    service.save().unwrap();
 
     let text = fs::read_to_string(service.file_path()).unwrap();
     assert!(text.contains("\"Dark\""), "{text}");
@@ -98,8 +98,8 @@ fn save_raises_changed_event() {
         sink.fetch_add(1, Ordering::SeqCst);
     }));
 
-    service.save();
-    service.save();
+    service.save().unwrap();
+    service.save().unwrap();
 
     assert_eq!(raised.load(Ordering::SeqCst), 2);
 }
@@ -108,7 +108,7 @@ fn save_raises_changed_event() {
 fn failed_atomic_save_preserves_original_and_does_not_notify() {
     let temp = TempDir::new();
     let service = FileSettingsService::new(Some(temp.path().to_path_buf()));
-    service.try_save().unwrap();
+    service.save().unwrap();
     let original = fs::read(service.file_path()).unwrap();
     let mut permissions = fs::metadata(service.file_path()).unwrap().permissions();
     permissions.set_readonly(true);
@@ -119,7 +119,7 @@ fn failed_atomic_save_preserves_original_and_does_not_notify() {
         sink.fetch_add(1, Ordering::SeqCst);
     }));
     service.update(&mut |settings| settings.download_threads = 12);
-    assert!(service.try_save().is_err());
+    assert!(service.save().is_err());
     assert_eq!(fs::read(service.file_path()).unwrap(), original);
     assert_eq!(raised.load(Ordering::SeqCst), 0);
     #[allow(clippy::permissions_set_readonly_false)]
@@ -134,7 +134,7 @@ fn corrupted_configuration_has_recoverable_backup() {
     fs::write(temp.path().join("settings.json"), broken).unwrap();
     let service = FileSettingsService::new(Some(temp.path().to_path_buf()));
     assert!(service.load_warning().unwrap().contains("备份"));
-    service.try_save().unwrap();
+    service.save().unwrap();
     let backup = fs::read_dir(temp.path())
         .unwrap()
         .filter_map(Result::ok)

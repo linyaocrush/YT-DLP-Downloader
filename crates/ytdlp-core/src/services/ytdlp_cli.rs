@@ -25,6 +25,11 @@ static SPEED_RE: LazyLock<Regex> =
 static ETA_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bETA\s+(\S+)").unwrap());
 static MERGE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"Merging formats into\s+"(.+?)"\s*$"#).unwrap());
+static URL_CREDENTIALS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"://[^/@\s]+:[^/@\s]+@").unwrap());
+static SECRET_PARAMETER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)([?&](?:token|access_token|api_key|password|passwd|secret)=)[^&\s]+").unwrap()
+});
 
 /// One incremental update reported while a download runs.
 #[derive(Debug, Clone, PartialEq)]
@@ -740,8 +745,14 @@ fn sanitize_log_line(line: &str, cookie_file: Option<&str>) -> String {
     }
     let lower = safe.to_lowercase();
     if lower.contains("authorization:") || lower.contains("cookie:") {
-        safe = "[敏感请求头已隐藏]".into();
+        return "[敏感请求头已隐藏]".into();
     }
+    safe = URL_CREDENTIALS_RE
+        .replace_all(&safe, "://[已隐藏]@")
+        .into_owned();
+    safe = SECRET_PARAMETER_RE
+        .replace_all(&safe, "$1[已隐藏]")
+        .into_owned();
     safe
 }
 
@@ -881,4 +892,22 @@ pub fn friendly_error(message: &str) -> String {
     }
 
     message.to_string()
+}
+
+#[cfg(test)]
+mod log_sanitization_tests {
+    use super::sanitize_log_line;
+
+    #[test]
+    fn sanitizes_cookie_paths_headers_url_credentials_and_secret_parameters() {
+        let line = "https://user:pass@example.com/video?token=abc123 C:/cookies.txt";
+        let safe = sanitize_log_line(line, Some("C:/cookies.txt"));
+        assert!(safe.contains("https://[已隐藏]@example.com"));
+        assert!(safe.contains("token=[已隐藏]"));
+        assert!(safe.contains("[Cookie 文件已隐藏]"));
+        assert_eq!(
+            sanitize_log_line("Cookie: session=secret", None),
+            "[敏感请求头已隐藏]"
+        );
+    }
 }

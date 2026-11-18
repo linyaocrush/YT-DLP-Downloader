@@ -16,7 +16,7 @@ use ytdlp_downloader_core::{
 // Media metadata
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoSourceDto {
     pub format_id: String,
@@ -44,7 +44,7 @@ impl From<&VideoSource> for VideoSourceDto {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioSourceDto {
     pub format_id: String,
@@ -216,6 +216,50 @@ pub struct DownloadOutcomeDto {
     pub cancelled: bool,
     pub output_path: Option<String>,
     pub error: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    #[test]
+    fn download_request_uses_frontend_camel_case_contract() {
+        let request = DownloadRequestDto {
+            cookie_file: None,
+            url: "https://example.com/video".into(),
+            auto: false,
+            kind: DownloadKind::Default,
+            resolution: ResolutionPreference::UpTo1080P,
+            manual: Some(ManualSelectionDto {
+                video_format_id: Some("137".into()),
+                video_has_audio: false,
+                audio_format_id: Some("140".into()),
+            }),
+            output_directory: "C:/out".into(),
+            output_template: None,
+            write_thumbnail: true,
+            live: false,
+        };
+        let value = serde_json::to_value(&request).unwrap();
+        assert_eq!(value["cookieFile"], Value::Null);
+        assert_eq!(value["outputDirectory"], "C:/out");
+        assert_eq!(value["manual"]["videoFormatId"], "137");
+        assert_eq!(value["manual"]["audioFormatId"], "140");
+        assert!(serde_json::from_value::<DownloadRequestDto>(json!({
+            "cookieFile": null,
+            "url": "https://example.com/video",
+            "auto": true,
+            "kind": "AudioOnly",
+            "resolution": "Best",
+            "manual": null,
+            "outputDirectory": "C:/out",
+            "outputTemplate": null,
+            "writeThumbnail": false,
+            "live": false
+        }))
+        .is_ok());
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@
     itemStatusText,
   } from "../lib/download.svelte";
   import { RESOLUTION_CATALOG, type DownloadKind } from "../lib/types";
+  import SourceTable from "../lib/components/SourceTable.svelte";
 
   const kindOptions: { value: DownloadKind; label: string }[] = [
     { value: "Default", label: "默认" },
@@ -306,77 +307,17 @@
   {#if downloadStore.showSourceTables}
     <div style="display:flex; gap:12px; margin-top:12px; min-height:220px">
       {#if downloadStore.showVideoSources}
-        <div class="card" style="flex:1; padding:12px; min-width:0; margin-top:0">
-          <div class="semi" style="margin:0 0 8px 4px">视频源</div>
-          <div class="table-scroll">
-            <table class="data">
-              <thead>
-                <tr>
-                  <th>格式 ID</th>
-                  <th>分辨率</th>
-                  <th>帧率</th>
-                  <th>码率</th>
-                  <th>视频编码</th>
-                  <th>类型</th>
-                  <th>容器</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each downloadStore.activeVideos as video (video.formatId)}
-                  <tr
-                    class:selected={downloadStore.activeSelectedVideo?.formatId === video.formatId}
-                    onclick={() => (downloadStore.activeSelectedVideo = video)}
-                  >
-                    <td>{video.formatId}</td>
-                    <td>{video.resolution}</td>
-                    <td>{video.fpsText}</td>
-                    <td>{video.bitrateText}</td>
-                    <td>{video.codec}</td>
-                    <td>{video.kind}</td>
-                    <td>{video.container}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SourceTable kind="video" title="视频源" sources={downloadStore.activeVideos} selectedFormatId={downloadStore.activeSelectedVideo?.formatId ?? null} onselect={(source) => (downloadStore.activeSelectedVideo = source as typeof downloadStore.activeSelectedVideo)} />
       {/if}
 
       {#if downloadStore.showAudioSources}
-        <div class="card" style="flex:1; padding:12px; min-width:0; margin-top:0">
-          <div class="semi" style="margin:0 0 8px 4px">音频源</div>
-          <div class="table-scroll">
-            <table class="data">
-              <thead>
-                <tr>
-                  <th>格式 ID</th>
-                  <th>码率</th>
-                  <th>音频编码</th>
-                  <th>容器</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each downloadStore.activeAudios as audio (audio.formatId)}
-                  <tr
-                    class:selected={downloadStore.activeSelectedAudio?.formatId === audio.formatId}
-                    onclick={() => (downloadStore.activeSelectedAudio = audio)}
-                  >
-                    <td>{audio.formatId}</td>
-                    <td>{audio.bitrateText}</td>
-                    <td>{audio.codec}</td>
-                    <td>{audio.container}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SourceTable kind="audio" title="音频源" sources={downloadStore.activeAudios} selectedFormatId={downloadStore.activeSelectedAudio?.formatId ?? null} onselect={(source) => (downloadStore.activeSelectedAudio = source as typeof downloadStore.activeSelectedAudio)} />
       {/if}
     </div>
   {/if}
 
   <!-- 状态 + 选择提示 -->
-  <div class="status-line">
+  <div class="status-line" role="status" aria-live="polite">
     <div class="grow">{downloadStore.statusText}</div>
     {#if downloadStore.lastOutputPath}<button class="btn" onclick={() => downloadStore.reveal(downloadStore.lastOutputPath)}>定位文件</button>{/if}
     <div class="selection-hint">{downloadStore.selectionHint}</div>
@@ -474,10 +415,8 @@
     <details class="logs">
       <summary>日志</summary>
       <button class="btn" onclick={() => downloadStore.copyDiagnostics()}>复制诊断信息</button>
-      <div class="log" style="margin-top:8px">
-        {#each downloadStore.logs as line, index (index)}
-          <div class="log-line">{line}</div>
-        {/each}
+      <div class="log" style="margin-top:8px" role="log" aria-live="polite" aria-label="下载日志">
+        {downloadStore.logText}
       </div>
     </details>
   </div>

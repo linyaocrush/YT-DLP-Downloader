@@ -644,6 +644,18 @@ table.data tr.selected td {
   border-radius: 6px;
 }
 
+.card.source-card,
+.card.source-card + .card.source-card {
+  flex: 1;
+  min-width: 0;
+  padding: 12px;
+  margin-top: 0;
+}
+
+.source-title {
+  margin: 0 0 8px 4px;
+}
+
 /* Tabs ---------------------------------------------------------------------*/
 
 .tabs {

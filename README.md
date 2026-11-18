@@ -63,7 +63,7 @@ Windows 10/11 需要 WebView2 运行时（Windows 11 与较新的 Windows 10 已
 
 ## 从源码构建
 
-需要 Rust（≥ 1.80）与 Node.js。
+需要 Node.js 22、Rust stable 与 Windows WebView2。仓库的 CI 使用 Rust stable；当前未承诺低于 CI 工具链的最低 Rust 版本。
 
 ```powershell
 # 1. 构建前端（Tauri 会在编译期把 apps\desktop\dist 嵌进 exe）

@@ -5,6 +5,8 @@
 
 import * as api from "./api";
 import { previewLinks, linkKey } from "./importLinks";
+import { LogBuffer } from "./logBuffer.svelte";
+import { QueuePersistence } from "./queuePersistence";
 import { settingsStore } from "./store.svelte";
 import {
   EXTENSION_TOKEN,
@@ -151,7 +153,8 @@ export class DownloadStore {
   progress = $state(0);
   speedText = $state("");
   etaText = $state("");
-  logs = $state<string[]>([]);
+  private readonly logBuffer = new LogBuffer();
+  get logText(): string { return this.logBuffer.text; }
   statusText = $state("就绪：输入视频链接后点击“解析”，即可查看可用的画质与音质源。");
   ytDlpStatus = $state("");
   ytDlpReady = $state(false);
@@ -191,7 +194,11 @@ export class DownloadStore {
   private lastJobId = 0;
   private runTargetIds: number[] = [];
   private completedTargetIds = new Set<number>();
-  private queueSaveChain: Promise<void> = Promise.resolve();
+  private readonly queuePersistence = new QueuePersistence<QueueItem[]>(
+    snapshot => api.saveQueue(snapshot),
+    350,
+    error => { this.statusText = errorMessage(error); },
+  );
   private queueLoaded = false;
   lastOutputPath = $state<string | null>(null);
   importText = $state("");
@@ -765,7 +772,7 @@ export class DownloadStore {
       this.statusText = isCancelled(error) ? "解析已取消" : parseErrorMessage(error);
     } finally {
       this.isBusy = false;
-      await this.persistQueue();
+      await this.persistQueue(true);
     }
 
     if (!playlist || this.stopRequested) return;
@@ -896,7 +903,7 @@ export class DownloadStore {
       this.isProgressVisible = false;
       this.queueProgressText = "";
       this.isBusy = false;
-      await this.persistQueue();
+      await this.persistQueue(true);
     }
   }
 
@@ -999,7 +1006,7 @@ export class DownloadStore {
     this.isProgressVisible = true;
     this.speedText = "";
     this.etaText = "";
-    this.logs = [];
+    this.logBuffer.clear();
     this.startTaskbar();
 
     this.queueTotal = targets.length;
@@ -1022,8 +1029,7 @@ export class DownloadStore {
         item.savedRequest = request;
         return { itemId: item.id, request };
       });
-      await this.queueSaveChain;
-      await api.saveQueue(this.queue);
+      await this.persistQueue(true);
       if (this.stopRequested) throw {kind: "cancelled"};
       const outcome = await api.startQueue(requests);
       const persisted = await api.loadQueue() as QueueItem[];
@@ -1044,7 +1050,7 @@ export class DownloadStore {
       this.currentItemId = null;
       this.isBusy = false;
       this.activeJobId = null;
-      await this.persistQueue();
+      await this.persistQueue(true);
     }
 
     // Taskbar: show the aggregate result once the queue finished.
@@ -1179,13 +1185,16 @@ export class DownloadStore {
     }
   }
 
-  async persistQueue(): Promise<void> {
+  async persistQueue(force = false): Promise<void> {
     if (!this.queueLoaded) return;
     const snapshot = JSON.parse(JSON.stringify(this.queue)) as QueueItem[];
     for (const item of snapshot) if (item.savedRequest) item.savedRequest.cookieFile = null;
-    const save = this.queueSaveChain.then(() => api.saveQueue(snapshot));
-    this.queueSaveChain = save.catch(error => { this.statusText = errorMessage(error); });
-    await this.queueSaveChain;
+    if (!force) {
+      this.queuePersistence.schedule(snapshot);
+      return;
+    }
+    this.queuePersistence.schedule(snapshot);
+    await this.queuePersistence.flush();
   }
 
   async retryItems(ids: number[]): Promise<void> {
@@ -1201,7 +1210,7 @@ export class DownloadStore {
 
   async copyDiagnostics(): Promise<void> {
     const sensitive = [this.selectedCookiePath, settingsStore.value.CookieFile].filter(Boolean) as string[];
-    let text = [this.statusText, ...this.queue.filter(item => item.error).map(item => `${item.title}: ${item.error}`), ...this.logs].join("\n");
+    let text = [this.statusText, ...this.queue.filter(item => item.error).map(item => `${item.title}: ${item.error}`), this.logBuffer.text].join("\n");
     for (const value of sensitive) text = text.split(value).join("[Cookie 文件已隐藏]");
     text = text.replace(/(cookie|authorization|proxy-authorization)\s*[:=]\s*[^\r\n]+/gi, "$1: [已隐藏]").replace(/:\/\/[^/@\s]+:[^/@\s]+@/g, "://[已隐藏]@");
     try { await navigator.clipboard.writeText(text); this.statusText = "诊断信息已复制"; }
@@ -1220,7 +1229,7 @@ export class DownloadStore {
   }
 
   private appendLog(line: string): void {
-    this.logs.push(line);
+    this.logBuffer.append(line);
   }
 
   // ------------------------------------------------------------- taskbar / notify

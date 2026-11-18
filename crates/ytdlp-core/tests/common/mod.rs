@@ -85,12 +85,13 @@ impl SettingsService for FakeSettings {
         mutate(&mut guard);
     }
 
-    fn save(&self) {
+    fn save(&self) -> std::io::Result<()> {
         self.saves.fetch_add(1, Ordering::SeqCst);
         let listeners = self.listeners.lock().unwrap().clone();
         for listener in listeners {
             listener();
         }
+        Ok(())
     }
 
     fn subscribe(&self, listener: SettingsListener) {

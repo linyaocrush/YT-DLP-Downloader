@@ -18,14 +18,8 @@ pub trait SettingsService: Send + Sync {
     /// Mutates the live settings in place.
     fn update(&self, mutate: &mut dyn FnMut(&mut AppSettings));
 
-    /// Serializes the current settings to disk and notifies listeners.
-    /// Never fails the caller: a settings file that cannot be written is ignored.
-    fn save(&self);
-
-    fn try_save(&self) -> io::Result<()> {
-        self.save();
-        Ok(())
-    }
+    /// Serializes the current settings to disk and notifies listeners on success.
+    fn save(&self) -> io::Result<()>;
 
     fn load_warning(&self) -> Option<String> {
         None
@@ -81,11 +75,7 @@ impl SettingsService for FileSettingsService {
         }
     }
 
-    fn save(&self) {
-        let _ = self.try_save();
-    }
-
-    fn try_save(&self) -> io::Result<()> {
+    fn save(&self) -> io::Result<()> {
         if self
             .warning
             .as_deref()

@@ -17,6 +17,11 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// Callback invoked once per captured output line (on the runner's async task).
 pub type LineCallback = Arc<dyn Fn(&str) + Send + Sync + 'static>;
 
+const CAPTURE_LIMIT_BYTES: usize = 1024 * 1024;
+const CAPTURE_TRUNCATION_MARKER: &str = "\n[输出过长，已省略较早内容]\n";
+const CAPTURE_TAIL_BYTES: usize = CAPTURE_LIMIT_BYTES - CAPTURE_TRUNCATION_MARKER.len();
+const PROCESS_CLEANUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// Outcome of a finished (or cancelled) process run.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProcessResult {
@@ -93,7 +98,6 @@ impl ProcessRunner for TokioProcessRunner {
         if cancellation.is_cancelled() {
             return Err(ProcessError::Cancelled);
         }
-        let bounded = arguments.iter().any(|arg| arg == "--newline");
         command
             .args(arguments)
             .stdin(Stdio::null())
@@ -111,12 +115,14 @@ impl ProcessRunner for TokioProcessRunner {
         let stdout_buffer = Arc::new(Mutex::new(String::new()));
         let stderr_buffer = Arc::new(Mutex::new(String::new()));
 
-        let stdout_task = child.stdout.take().map(|stream| {
-            tokio::spawn(pump(stream, on_stdout, Arc::clone(&stdout_buffer), bounded))
-        });
-        let stderr_task = child.stderr.take().map(|stream| {
-            tokio::spawn(pump(stream, on_stderr, Arc::clone(&stderr_buffer), bounded))
-        });
+        let stdout_task = child
+            .stdout
+            .take()
+            .map(|stream| tokio::spawn(pump(stream, on_stdout, Arc::clone(&stdout_buffer))));
+        let stderr_task = child
+            .stderr
+            .take()
+            .map(|stream| tokio::spawn(pump(stream, on_stderr, Arc::clone(&stderr_buffer))));
 
         // Only the wait branch touches `child`; the cancellation branch merely
         // sets a flag, so the mutable borrow of `child` is released afterwards.
@@ -134,15 +140,27 @@ impl ProcessRunner for TokioProcessRunner {
         if cancelled {
             kill_tree(pid);
             let _ = child.start_kill();
-            let status = child.wait().await.map_err(ProcessError::Io)?;
+            let status = tokio::time::timeout(PROCESS_CLEANUP_TIMEOUT, child.wait())
+                .await
+                .map_err(|_| {
+                    ProcessError::Io(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "等待子进程退出超时",
+                    ))
+                })?
+                .map_err(ProcessError::Io)?;
             exit_code = Some(status.code().unwrap_or(-1));
         }
 
-        if let Some(task) = stdout_task {
-            let _ = task.await;
-        }
-        if let Some(task) = stderr_task {
-            let _ = task.await;
+        for mut task in [stdout_task, stderr_task].into_iter().flatten() {
+            if tokio::time::timeout(PROCESS_CLEANUP_TIMEOUT, &mut task)
+                .await
+                .is_err()
+            {
+                kill_tree(pid);
+                task.abort();
+                let _ = task.await;
+            }
         }
 
         Ok(ProcessResult {
@@ -154,30 +172,30 @@ impl ProcessRunner for TokioProcessRunner {
     }
 }
 
-async fn pump<R>(
-    reader: R,
-    callback: Option<LineCallback>,
-    buffer: Arc<Mutex<String>>,
-    bounded: bool,
-) where
+async fn pump<R>(reader: R, callback: Option<LineCallback>, buffer: Arc<Mutex<String>>)
+where
     R: AsyncRead + Unpin + Send + 'static,
 {
     let mut lines = BufReader::new(reader).lines();
     while let Ok(Some(line)) = lines.next_line().await {
         if let Ok(mut guard) = buffer.lock() {
-            guard.push_str(&line);
-            guard.push('\n');
-            if bounded && guard.len() > 256 * 1024 {
-                let mut start = guard.len() - 128 * 1024;
-                while !guard.is_char_boundary(start) {
-                    start += 1;
-                }
-                guard.drain(..start);
-            }
+            append_capture(&mut guard, &line);
         }
         if let Some(callback) = &callback {
             callback(&line);
         }
+    }
+}
+
+fn append_capture(buffer: &mut String, line: &str) {
+    buffer.push_str(line);
+    buffer.push('\n');
+    if buffer.len() > CAPTURE_LIMIT_BYTES {
+        let mut start = buffer.len() - CAPTURE_TAIL_BYTES;
+        while !buffer.is_char_boundary(start) {
+            start += 1;
+        }
+        buffer.replace_range(..start, CAPTURE_TRUNCATION_MARKER);
     }
 }
 
@@ -199,4 +217,20 @@ fn kill_tree(pid: Option<u32>) {
 
     #[cfg(not(windows))]
     let _ = pid;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_keeps_tail_with_bounded_size_and_marker() {
+        let mut buffer = String::new();
+        for _ in 0..20 {
+            append_capture(&mut buffer, &"x".repeat(64 * 1024));
+        }
+        assert!(buffer.len() <= CAPTURE_LIMIT_BYTES);
+        assert!(buffer.contains(CAPTURE_TRUNCATION_MARKER));
+        assert!(buffer.ends_with(&format!("{}\n", "x".repeat(64 * 1024))));
+    }
 }

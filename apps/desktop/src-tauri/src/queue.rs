@@ -6,6 +6,26 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
 use ytdlp_downloader_core::settings_service::atomic_write;
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+enum QueueItemState {
+    Pending,
+    Parsing,
+    Parsed,
+    Downloading,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QueueItemRecord {
+    id: u64,
+    url: String,
+    state: QueueItemState,
+}
+
 fn path() -> PathBuf {
     std::env::var_os("APPDATA")
         .map(PathBuf::from)
@@ -27,9 +47,11 @@ fn recover(bytes: &[u8]) -> Result<Vec<Value>, CommandError> {
         .map_err(|e| CommandError::message(format!("队列文件损坏：{e}")))?;
     validate_items(&items)?;
     for item in &mut items {
+        let record: QueueItemRecord = serde_json::from_value(item.clone())
+            .map_err(|_| CommandError::message("队列记录格式无效"))?;
         if matches!(
-            item["state"].as_str(),
-            Some("Downloading" | "Parsing" | "Parsed")
+            record.state,
+            QueueItemState::Downloading | QueueItemState::Parsing | QueueItemState::Parsed
         ) {
             item["state"] = json!("Pending");
         }
@@ -44,11 +66,9 @@ fn recover(bytes: &[u8]) -> Result<Vec<Value>, CommandError> {
 fn validate_items(items: &[Value]) -> Result<(), CommandError> {
     let mut ids = std::collections::HashSet::new();
     for item in items {
-        if !item.is_object()
-            || !item["id"].as_u64().is_some_and(|id| ids.insert(id))
-            || item["url"].as_str().is_none()
-            || item["state"].as_str().is_none()
-        {
+        let record: QueueItemRecord = serde_json::from_value(item.clone())
+            .map_err(|_| CommandError::message("队列记录格式无效"))?;
+        if !ids.insert(record.id) || record.url.trim().is_empty() {
             return Err(CommandError::message("队列记录无效或包含重复 ID"));
         }
     }
@@ -139,9 +159,18 @@ fn publish(app: &AppHandle, job_id: u64, item_id: u64, patch: Value) -> Result<(
     .map_err(|e| CommandError::io(e.to_string()))
 }
 
-pub fn retryable(message: &str) -> bool {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FailureKind {
+    Network,
+    Authentication,
+    Format,
+    FileSystem,
+    Other,
+}
+
+fn classify_failure(message: &str) -> FailureKind {
     let lower = message.to_lowercase();
-    [
+    if [
         "timed out",
         "timeout",
         "connection reset",
@@ -156,6 +185,45 @@ pub fn retryable(message: &str) -> bool {
     ]
     .iter()
     .any(|needle| lower.contains(needle))
+    {
+        FailureKind::Network
+    } else if [
+        "login required",
+        "sign in",
+        "authentication",
+        "unauthorized",
+        "forbidden",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        FailureKind::Authentication
+    } else if [
+        "requested format",
+        "format is not available",
+        "no suitable formats",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        FailureKind::Format
+    } else if [
+        "permission denied",
+        "access is denied",
+        "no space left",
+        "cannot write",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+    {
+        FailureKind::FileSystem
+    } else {
+        FailureKind::Other
+    }
+}
+
+fn retryable(message: &str) -> bool {
+    classify_failure(message) == FailureKind::Network
 }
 
 #[tauri::command]
@@ -291,9 +359,20 @@ mod tests {
     fn retry_only_transient_errors() {
         assert!(retryable("HTTP Error 503: Service Unavailable"));
         assert!(retryable("connection reset by peer"));
+        assert_eq!(
+            classify_failure("login required"),
+            FailureKind::Authentication
+        );
+        assert_eq!(
+            classify_failure("requested format unavailable"),
+            FailureKind::Format
+        );
+        assert_eq!(
+            classify_failure("permission denied"),
+            FailureKind::FileSystem
+        );
+        assert_eq!(classify_failure("video deleted"), FailureKind::Other);
         assert!(!retryable("login required"));
-        assert!(!retryable("video deleted"));
-        assert!(!retryable("requested format unavailable"));
     }
 
     #[tokio::test]
@@ -321,5 +400,8 @@ mod tests {
         assert_eq!(items[1]["state"], "Completed");
         assert_eq!(items[1]["outputPath"], "C:/out.mp4");
         assert!(recover(br#"[null]"#).is_err());
+        assert!(recover(br#"[{"id":1,"url":"https://example.com/1","state":"Unknown"}]"#).is_err());
+        assert!(recover(br#"[{"id":1,"url":"","state":"Pending"}]"#).is_err());
+        assert!(recover(br#"[{"id":1,"url":"https://example.com/1","state":"Pending"},{"id":1,"url":"https://example.com/2","state":"Pending"}]"#).is_err());
     }
 }

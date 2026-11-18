@@ -57,7 +57,7 @@ pub fn update_settings(
         .update(&mut |settings| *settings = updated.clone());
     state
         .settings
-        .try_save()
+        .save()
         .map_err(|error| CommandError::io(format!("设置保存失败：{error}")))?;
     Ok(updated)
 }
@@ -734,16 +734,52 @@ pub(crate) fn validate_request(request: &DownloadRequestDto) -> Result<(), Comma
         util::validate_cookie(path).map_err(CommandError::message)?;
     }
     if let Some(template) = &request.output_template {
-        if template.trim().is_empty()
-            || template.contains(['/', '\\', '\0', '\n', '\r'])
-            || template.contains([':', '"', '<', '>', '|', '?', '*'])
-        {
-            return Err(CommandError::message(
-                "文件名不能为空，且不能包含路径分隔符或 Windows 无效字符",
-            ));
-        }
+        validate_output_template(template)?;
     }
     Ok(())
+}
+
+fn validate_output_template(template: &str) -> Result<(), CommandError> {
+    let base_name = template.split('.').next().unwrap_or_default();
+    let reserved = ["CON", "PRN", "AUX", "NUL"]
+        .into_iter()
+        .any(|name| base_name.eq_ignore_ascii_case(name))
+        || (1..=9).any(|index| {
+            base_name.eq_ignore_ascii_case(&format!("COM{index}"))
+                || base_name.eq_ignore_ascii_case(&format!("LPT{index}"))
+        });
+    if template.trim().is_empty()
+        || template.len() > 240
+        || template == "."
+        || template == ".."
+        || template.ends_with([' ', '.'])
+        || template.chars().any(|character| {
+            character.is_control()
+                || ['/', '\\', ':', '"', '<', '>', '|', '?', '*'].contains(&character)
+        })
+        || reserved
+    {
+        return Err(CommandError::message(
+            "文件名无效：请避免路径分隔符、Windows 保留名、控制字符及过长名称",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod request_validation_tests {
+    use super::validate_output_template;
+
+    #[test]
+    fn validates_windows_file_names_without_rejecting_yt_dlp_tokens() {
+        assert!(validate_output_template("%(title)s.%(ext)s").is_ok());
+        assert!(validate_output_template("video - 001.%(ext)s").is_ok());
+        for invalid in [
+            "", "..", "../video", "name.", "name ", "CON.txt", "bad?.mp4",
+        ] {
+            assert!(validate_output_template(invalid).is_err(), "{invalid}");
+        }
+    }
 }
 
 fn expression_requires_ffmpeg(expression: &str) -> bool {
