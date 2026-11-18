@@ -306,7 +306,7 @@
   {#if downloadStore.showSourceTables}
     <div style="display:flex; gap:12px; margin-top:12px; min-height:220px">
       {#if downloadStore.showVideoSources}
-        <div class="card" style="flex:1; padding:12px; min-width:0">
+        <div class="card" style="flex:1; padding:12px; min-width:0; margin-top:0">
           <div class="semi" style="margin:0 0 8px 4px">视频源</div>
           <div class="table-scroll">
             <table class="data">
@@ -343,7 +343,7 @@
       {/if}
 
       {#if downloadStore.showAudioSources}
-        <div class="card" style="flex:1; padding:12px; min-width:0">
+        <div class="card" style="flex:1; padding:12px; min-width:0; margin-top:0">
           <div class="semi" style="margin:0 0 8px 4px">音频源</div>
           <div class="table-scroll">
             <table class="data">
@@ -473,17 +473,6 @@
 
     <details class="logs">
       <summary>日志</summary>
-      <div class="form-row">
-        <Switch
-          checked={downloadStore.saveLog}
-          disabled={downloadStore.isBusy}
-          title="完整日志保存到输出目录"
-          onchange={(value) => (downloadStore.saveLog = value)}
-        />
-        <span class="muted" style="margin-left:4px; font-size:12.5px">
-          完整日志保存到输出目录（download-时间戳.log）
-        </span>
-      </div>
       <button class="btn" onclick={() => downloadStore.copyDiagnostics()}>复制诊断信息</button>
       <div class="log" style="margin-top:8px">
         {#each downloadStore.logs as line, index (index)}

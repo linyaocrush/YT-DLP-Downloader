@@ -114,7 +114,6 @@ impl std::error::Error for YtDlpError {
 /// Everything needed for one download invocation.
 #[derive(Debug, Clone)]
 pub struct DownloadRequest {
-    pub save_log: bool,
     pub url: String,
     pub format_expression: String,
     pub output_directory: String,
@@ -133,7 +132,6 @@ impl DownloadRequest {
         output_directory: impl Into<String>,
     ) -> Self {
         Self {
-            save_log: false,
             url: url.into(),
             format_expression: format_expression.into(),
             output_directory: output_directory.into(),
@@ -517,42 +515,15 @@ impl YtDlpCli {
         arguments.push(request.url.clone());
 
         let tracking = Arc::new(Mutex::new(DownloadTracking::default()));
-        let handler = build_line_handler(Arc::clone(&tracking), progress);
-        let on_line: LineCallback = if request.save_log {
-            use std::io::Write;
-            let stamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos();
-            let log_path =
-                Path::new(&request.output_directory).join(format!("download-{stamp}.log"));
-            let file = std::fs::File::create(&log_path).map_err(YtDlpError::Io)?;
-            let log = Mutex::new(file);
-            let cookie = request.cookie_file.clone();
-            Arc::new(move |line: &str| {
-                let mut safe = line.to_string();
-                if let Some(path) = &cookie {
-                    safe = safe.replace(path, "[Cookie 文件已隐藏]");
-                }
-                let lower = safe.to_lowercase();
-                if lower.contains("authorization:") || lower.contains("cookie:") {
-                    safe = "[敏感请求头已隐藏]".into();
-                }
-                if let Ok(mut file) = log.lock() {
-                    let _ = writeln!(file, "{safe}");
-                }
-                handler(line);
-            })
-        } else {
-            handler
-        };
+        let handler =
+            build_line_handler(Arc::clone(&tracking), progress, request.cookie_file.clone());
 
         let result = match self
             .run_process(
                 &executable,
                 &arguments,
-                Some(Arc::clone(&on_line)),
-                Some(on_line),
+                Some(Arc::clone(&handler)),
+                Some(handler),
                 cancellation,
             )
             .await
@@ -611,6 +582,7 @@ impl YtDlpCli {
 fn build_line_handler(
     tracking: Arc<Mutex<DownloadTracking>>,
     progress: Option<ProgressCallback>,
+    cookie_file: Option<String>,
 ) -> LineCallback {
     Arc::new(move |line: &str| {
         let noop = |_: DownloadUpdate| {};
@@ -620,6 +592,7 @@ fn build_line_handler(
             .unwrap_or(&noop);
 
         let trimmed = line.trim_end_matches('\r');
+        let log_line = sanitize_log_line(trimmed, cookie_file.as_deref());
         if let Some(json) = trimmed.strip_prefix("__YTDLP_FILE__") {
             if let Ok(path) = serde_json::from_str::<String>(json) {
                 if let Ok(mut guard) = tracking.lock() {
@@ -629,7 +602,7 @@ fn build_line_handler(
                     phase: Some("Completed".into()),
                     downloaded_bytes: None,
                     elapsed: None,
-                    line: None,
+                    line: Some(log_line.clone()),
                     percent: Some(100.0),
                     output_path: Some(path),
                     speed: None,
@@ -672,7 +645,7 @@ fn build_line_handler(
                         phase: Some(format!("{stage}:{format_id}")),
                         downloaded_bytes: bytes,
                         elapsed: value["elapsed"].as_f64(),
-                        line: None,
+                        line: Some(log_line.clone()),
                         percent,
                         output_path: None,
                         speed: value["speed"]
@@ -703,7 +676,7 @@ fn build_line_handler(
                 phase: None,
                 downloaded_bytes: None,
                 elapsed: None,
-                line: None,
+                line: Some(log_line.clone()),
                 percent: Some(value.clamp(0.0, 100.0)),
                 output_path: None,
                 speed,
@@ -721,7 +694,7 @@ fn build_line_handler(
                 phase: Some("Processing".into()),
                 downloaded_bytes: None,
                 elapsed: None,
-                line: None,
+                line: Some(log_line.clone()),
                 percent: None,
                 output_path: Some(path),
                 speed: None,
@@ -738,7 +711,7 @@ fn build_line_handler(
                 phase: None,
                 downloaded_bytes: None,
                 elapsed: None,
-                line: None,
+                line: Some(log_line.clone()),
                 percent: None,
                 output_path: Some(path),
                 speed: None,
@@ -751,13 +724,25 @@ fn build_line_handler(
             phase: None,
             downloaded_bytes: None,
             elapsed: None,
-            line: Some(trimmed.to_string()),
+            line: Some(log_line),
             percent: None,
             output_path: None,
             speed: None,
             eta: None,
         });
     })
+}
+
+fn sanitize_log_line(line: &str, cookie_file: Option<&str>) -> String {
+    let mut safe = line.to_string();
+    if let Some(path) = cookie_file {
+        safe = safe.replace(path, "[Cookie 文件已隐藏]");
+    }
+    let lower = safe.to_lowercase();
+    if lower.contains("authorization:") || lower.contains("cookie:") {
+        safe = "[敏感请求头已隐藏]".into();
+    }
+    safe
 }
 
 fn capture_group(regex: &Regex, text: &str, index: usize) -> Option<String> {

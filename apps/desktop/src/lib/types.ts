@@ -116,7 +116,6 @@ export interface ManualSelectionDto {
 }
 
 export interface DownloadRequestDto {
-  saveLog: boolean;
   cookieFile: string | null;
   url: string;
   auto: boolean;

@@ -57,7 +57,6 @@ export interface PlaylistChoice extends PlaylistInfoDto {
   search: string;
 }
 
-const MAX_LOG_LINES = 1000;
 const COMPLETION_DISPLAY_MS = 3000;
 
 export function itemStatusText(item: QueueItem): string {
@@ -198,7 +197,6 @@ export class DownloadStore {
   importText = $state("");
   playlistChoice = $state<PlaylistChoice | null>(null);
   keepDuplicates = $state(false);
-  saveLog = $state(false);
   get importPreview() { return previewLinks(this.importText, this.queue.map(item => item.url)); }
 
   get filteredPlaylistEntries() {
@@ -1073,7 +1071,6 @@ export class DownloadStore {
         : null;
 
     return {
-      saveLog: this.saveLog,
       cookieFile: this.selectedCookiePath,
       url,
       auto: !manual,
@@ -1224,7 +1221,6 @@ export class DownloadStore {
 
   private appendLog(line: string): void {
     this.logs.push(line);
-    if (this.logs.length > MAX_LOG_LINES) this.logs.splice(0, this.logs.length - MAX_LOG_LINES);
   }
 
   // ------------------------------------------------------------- taskbar / notify

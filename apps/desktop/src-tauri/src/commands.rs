@@ -528,7 +528,6 @@ pub(crate) async fn run_download(
     std::fs::remove_file(probe)
         .map_err(|e| CommandError::io(format!("无法清理目录检查文件：{e}")))?;
     download.cookie_file = request.cookie_file.clone();
-    download.save_log = request.save_log;
     download.proxy_url = util::proxy_argument(&settings, &request.url);
     download.concurrent_fragments = settings.download_threads.clamp(1, 64);
     download.output_template = request.output_template.clone();

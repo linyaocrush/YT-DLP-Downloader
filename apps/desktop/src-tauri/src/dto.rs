@@ -161,8 +161,6 @@ pub struct ManualSelectionDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadRequestDto {
-    #[serde(default)]
-    pub save_log: bool,
     pub cookie_file: Option<String>,
     pub url: String,
     /// True for auto selection; false to use `manual`.
