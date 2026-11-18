@@ -306,23 +306,45 @@ impl YtDlpCli {
             ))));
         }
 
-        let parsed = match self.parser.parse_playlist(&result.standard_output) {
-            Ok(Some(playlist)) => Ok(MediaParseResult {
-                media: None,
-                playlist: Some(playlist),
-            }),
-            Ok(None) => self
-                .parser
-                .parse(&result.standard_output)
-                .map(|media| MediaParseResult {
-                    media: Some(media),
-                    playlist: None,
-                }),
-            Err(error) => Err(error),
-        };
+        let playlist_result = self.parser.parse_playlist(&result.standard_output);
+        if let Ok(Some(playlist)) = &playlist_result {
+            if !playlist.entries.is_empty() {
+                return Ok(MediaParseResult {
+                    media: None,
+                    playlist: Some(playlist.clone()),
+                });
+            }
+        }
 
-        match parsed {
-            Ok(parsed) => Ok(parsed),
+        // Some YouTube generated/recommendation lists (for example RDMM) do
+        // not produce a useful playlist object with --dump-single-json even
+        // though yt-dlp can enumerate every entry with --print url.
+        let looks_like_playlist = url.split('?').nth(1).is_some_and(|query| {
+            query
+                .split('&')
+                .any(|part| part.split('=').next() == Some("list"))
+        }) || url.to_ascii_lowercase().contains("/playlist");
+        if looks_like_playlist
+            && (playlist_result.is_err()
+                || matches!(&playlist_result, Ok(Some(playlist)) if playlist.entries.is_empty())
+                || matches!(&playlist_result, Ok(None)))
+        {
+            if let Ok(playlist) = self
+                .get_flat_playlist(url, cookie_file, proxy_url, cancellation.clone())
+                .await
+            {
+                return Ok(MediaParseResult {
+                    media: None,
+                    playlist: Some(playlist),
+                });
+            }
+        }
+
+        match self.parser.parse(&result.standard_output) {
+            Ok(media) => Ok(MediaParseResult {
+                media: Some(media),
+                playlist: None,
+            }),
             // A flat listing of a single video can omit formats; re-query it as a
             // concrete video instead of failing.
             Err(ParseError::InvalidData(_)) => {
@@ -336,6 +358,87 @@ impl YtDlpCli {
             }
             Err(error) => Err(YtDlpError::Message(format!("解析视频信息失败：{error}"))),
         }
+    }
+
+    async fn get_flat_playlist(
+        &self,
+        url: &str,
+        cookie_file: Option<&str>,
+        proxy_url: Option<&str>,
+        cancellation: CancellationToken,
+    ) -> Result<PlaylistInfo, YtDlpError> {
+        let Some(executable) = self.paths.resolve() else {
+            return Err(YtDlpError::Message(NOT_CONFIGURED_MESSAGE.to_string()));
+        };
+        let mut arguments = vec![
+            "--encoding".to_string(),
+            "utf-8".to_string(),
+            "--skip-download".to_string(),
+            "--flat-playlist".to_string(),
+            "--no-warnings".to_string(),
+            "--print".to_string(),
+            "%(webpage_url)s\t%(title)s\t%(thumbnail)s".to_string(),
+        ];
+        add_cookie_arguments(&mut arguments, cookie_file);
+        add_proxy_arguments(&mut arguments, proxy_url);
+        arguments.push(url.to_string());
+
+        let result = self
+            .run_process(&executable, &arguments, None, None, cancellation)
+            .await?;
+        if result.cancelled {
+            return Err(YtDlpError::Cancelled);
+        }
+        if result.exit_code != 0 {
+            return Err(YtDlpError::Message(friendly_error(&last_meaningful(
+                &result.standard_error,
+                &result.standard_output,
+            ))));
+        }
+
+        let entries = result
+            .standard_output
+            .lines()
+            .map(str::trim)
+            .filter_map(|line| {
+                let mut fields = line.splitn(3, '\t');
+                let url = fields.next()?.trim();
+                if !(url.starts_with("http://") || url.starts_with("https://")) {
+                    return None;
+                }
+                let title = fields.next().unwrap_or(url).trim();
+                let thumbnail = fields
+                    .next()
+                    .map(str::trim)
+                    .filter(|value| value.starts_with("http://") || value.starts_with("https://"));
+                Some((
+                    url,
+                    title,
+                    thumbnail
+                        .map(str::to_string)
+                        .or_else(|| youtube_thumbnail_url(url)),
+                ))
+            })
+            .enumerate()
+            .map(
+                |(index, (url, title, thumbnail))| crate::models::PlaylistEntry {
+                    index: index + 1,
+                    url: url.to_string(),
+                    title: title.to_string(),
+                    thumbnail_url: thumbnail,
+                },
+            )
+            .collect::<Vec<_>>();
+        if entries.is_empty() {
+            return Err(YtDlpError::Message(
+                "yt-dlp 未返回播放列表视频链接".to_string(),
+            ));
+        }
+        Ok(PlaylistInfo {
+            id: "-".to_string(),
+            title: "播放列表".to_string(),
+            entries,
+        })
     }
 
     pub async fn download(
@@ -662,6 +765,32 @@ fn capture_group(regex: &Regex, text: &str, index: usize) -> Option<String> {
         .captures(text)
         .and_then(|captures| captures.get(index))
         .map(|group| group.as_str().trim().to_string())
+}
+
+fn youtube_thumbnail_url(url: &str) -> Option<String> {
+    let host = url
+        .split("//")
+        .nth(1)?
+        .split('/')
+        .next()?
+        .split(':')
+        .next()?;
+    let video_id = if host.eq_ignore_ascii_case("youtu.be") {
+        url.split("//")
+            .nth(1)?
+            .split('/')
+            .nth(1)?
+            .split(['?', '&'])
+            .next()?
+    } else if host.ends_with("youtube.com") {
+        url.split('?')
+            .nth(1)?
+            .split('&')
+            .find_map(|part| part.strip_prefix("v="))?
+    } else {
+        return None;
+    };
+    (!video_id.is_empty()).then(|| format!("https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"))
 }
 
 fn add_cookie_arguments(arguments: &mut Vec<String>, cookie_file: Option<&str>) {

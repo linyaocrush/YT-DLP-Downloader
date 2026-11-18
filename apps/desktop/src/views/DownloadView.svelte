@@ -30,12 +30,15 @@
 
   let importDialog: HTMLDialogElement;
   let importInput: HTMLTextAreaElement;
+  let rangeStart = $state("1");
+  let rangeEnd = $state("1");
 
   function openImportDialog(): void {
     if (downloadStore.isBusy || importDialog.open) return;
     importDialog.showModal();
     importInput.focus();
   }
+
 </script>
 
 <div class="page" onfocusout={() => void settingsStore.flush()}>
@@ -59,7 +62,7 @@
         type="button"
         class="btn-primary"
         disabled={!downloadStore.canParse}
-        title="解析当前链接；若为播放列表（视频队列），会自动把列表中的全部视频加入下载队列并逐个解析；队列模式下按顺序解析队列中的所有视频"
+        title="解析当前链接；播放列表会先显示条目选择界面；队列模式下按顺序解析队列中的视频"
         onclick={() => downloadStore.parse()}
       >
         解析
@@ -491,6 +494,40 @@
   </div>
 </div>
 
+{#if downloadStore.playlistChoice}
+  {@const playlist = downloadStore.playlistChoice}
+  <div class="playlist-modal" role="presentation">
+    <section class="playlist-dialog" aria-labelledby="playlist-title">
+      <div class="playlist-titlebar">
+        <h2 id="playlist-title" class="card-title grow">{playlist.title}</h2>
+        <span class="muted">已选 {playlist.selected.filter(Boolean).length} / {playlist.entries.length}</span>
+      </div>
+      <div class="form-row">
+        <input class="playlist-search grow" type="text" aria-label="搜索播放列表" placeholder="搜索标题、序号或链接" value={playlist.search} oninput={(event) => downloadStore.setPlaylistSearch(event.currentTarget.value)} />
+        <button class="btn" onclick={() => downloadStore.selectPlaylistEntries(true)}>全选</button>
+        <button class="btn" onclick={() => downloadStore.selectPlaylistEntries(false)}>反选</button>
+      </div>
+      <div class="form-row">
+        <label>范围 <input type="number" min="1" max={playlist.entries.length} bind:value={rangeStart} /></label>
+        <span>至</span>
+        <input aria-label="范围结束序号" type="number" min="1" max={playlist.entries.length} bind:value={rangeEnd} />
+        <button class="btn" onclick={() => downloadStore.selectPlaylistRange(Number(rangeStart), Number(rangeEnd))}>选择范围</button>
+      </div>
+      <div class="playlist-list" aria-label="播放列表条目">
+        {#each downloadStore.filteredPlaylistEntries as { entry, position } (entry.index)}
+          <label class="playlist-entry">
+            <input type="checkbox" checked={playlist.selected[position]} onchange={() => downloadStore.togglePlaylistEntry(position)} />
+            {#if entry.thumbnailUrl}<img class="playlist-thumb" src={entry.thumbnailUrl} alt="" referrerpolicy="no-referrer" />{:else}<span class="playlist-thumb playlist-thumb-empty"></span>{/if}
+            <span class="playlist-index">{entry.index}</span>
+            <span class="playlist-entry-copy"><span class="playlist-entry-title">{entry.title}</span><span class="playlist-entry-url">{entry.url}</span></span>
+          </label>
+        {/each}
+      </div>
+      <div class="form-row"><span class="grow"></span><button class="btn" onclick={() => (downloadStore.playlistChoice = null)}>取消</button><button class="btn-primary" disabled={!playlist.selected.some(Boolean)} onclick={() => downloadStore.confirmPlaylistSelection()}>加入并解析所选项</button></div>
+    </section>
+  </div>
+{/if}
+
 <dialog bind:this={importDialog} class="import-dialog" aria-labelledby="import-dialog-title" aria-describedby="import-dialog-description">
   <div class="row">
     <h2 id="import-dialog-title" class="card-title grow">批量输入链接</h2>
@@ -533,6 +570,23 @@
 </dialog>
 
 <style>
+  .playlist-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(0, 0, 0, 0.4); }
+  .playlist-dialog { width: min(760px, calc(100vw - 40px)); max-height: calc(100vh - 48px); padding: 20px; overflow: hidden; border: 1px solid var(--card-border); border-radius: 8px; background: var(--card-bg); color: var(--text-primary); box-shadow: 0 12px 48px rgba(0, 0, 0, 0.24); }
+  .playlist-titlebar { display: flex; align-items: center; gap: 8px; }
+  .playlist-search { min-width: 0; width: auto; }
+  .playlist-list { max-height: min(48vh, 440px); overflow: auto; margin: 12px 0; border: 1px solid var(--divider); border-radius: 6px; background: var(--list-bg); }
+  .playlist-entry { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 6px 10px; border-bottom: 1px solid var(--divider); cursor: pointer; }
+  .playlist-entry:hover { background: var(--subtle-hover); }
+  .playlist-entry input[type="checkbox"] { appearance: none; width: 16px; height: 16px; flex: 0 0 16px; margin: 0; border: 1px solid var(--control-border); border-radius: 3px; background: var(--control-bg); }
+  .playlist-entry input[type="checkbox"]:checked { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--accent); }
+  .playlist-index { width: 34px; color: var(--text-secondary); text-align: right; }
+  .playlist-thumb { width: 72px; height: 42px; flex: 0 0 72px; object-fit: cover; border-radius: 4px; background: var(--placeholder); }
+  .playlist-thumb-empty { border: 1px solid var(--control-border); }
+  .playlist-entry-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .playlist-entry-title, .playlist-entry-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .playlist-entry-title { font-weight: 500; }
+  .playlist-entry-url { color: var(--text-secondary); font-size: 12px; user-select: text; }
+
   .import-dialog {
     width: min(680px, calc(100vw - 40px));
     max-height: calc(100vh - 48px);

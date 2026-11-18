@@ -111,4 +111,20 @@ await test("批量链接预览识别等价 YouTube 链接及无效输入", async
   assert.deepEqual(result.map(item => item.status), ["valid", "duplicate", "invalid"]);
 });
 
+await test("播放列表可按原始序号筛选范围且仅加入选中项", async () => {
+  const store = new DownloadStore();
+  store.queueLoaded = true;
+  store.playlistChoice = {
+    id: "p", title: "List", search: "", selected: [false, false, false],
+    entries: [1, 2, 3].map(index => ({index, title: `Video ${index}`, url: `https://example.com/${index}`})),
+  };
+  store.selectPlaylistRange(2, 3);
+  assert.deepEqual(store.playlistChoice.selected, [false, true, true]);
+  store.setPlaylistSearch("Video 3");
+  assert.deepEqual(store.filteredPlaylistEntries.map(({entry}) => entry.index), [3]);
+  store.setPlaylistSearch("");
+  store.confirmPlaylistSelection();
+  assert.deepEqual(store.queue.map(item => item.playlistIndex), [2, 3]);
+});
+
 console.log(`${listeners.length} frontend regression tests passed`);

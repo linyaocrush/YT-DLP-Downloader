@@ -72,8 +72,10 @@ export interface MediaInfoDto {
 }
 
 export interface PlaylistEntryDto {
+  index: number;
   url: string;
   title: string;
+  thumbnailUrl: string | null;
 }
 
 export interface PlaylistInfoDto {

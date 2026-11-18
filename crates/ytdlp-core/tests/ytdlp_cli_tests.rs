@@ -793,8 +793,10 @@ async fn get_media_or_playlist_playlist_returns_playlist_and_uses_flat_listing()
         id: "PL1".to_string(),
         title: "List".to_string(),
         entries: vec![PlaylistEntry {
+            index: 1,
             url: "https://example.com/1".to_string(),
             title: "One".to_string(),
+            thumbnail_url: None,
         }],
     };
     let parser = Arc::new(FakeParser::new(sample_media()).with_playlist(playlist.clone()));

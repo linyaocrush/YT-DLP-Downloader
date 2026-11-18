@@ -191,13 +191,21 @@ impl MediaInfoParser for JsonMediaInfoParser {
 
         let items = entries
             .iter()
-            .filter(|entry| entry.is_object())
-            .filter_map(|entry| {
+            .enumerate()
+            .filter(|(_, entry)| entry.is_object())
+            .filter_map(|(index, entry)| {
                 // Flat listings expose the canonical page URL as "webpage_url"
                 // and often as "url" too.
                 let url = str_field(entry, "webpage_url").or_else(|| str_field(entry, "url"))?;
                 let title = str_field(entry, "title").unwrap_or_else(|| url.clone());
-                Some(PlaylistEntry { url, title })
+                let thumbnail_url =
+                    str_field(entry, "thumbnail").or_else(|| youtube_thumbnail_url(&url));
+                Some(PlaylistEntry {
+                    index: index + 1,
+                    url,
+                    title,
+                    thumbnail_url,
+                })
             })
             .collect();
 
@@ -207,6 +215,35 @@ impl MediaInfoParser for JsonMediaInfoParser {
             entries: items,
         }))
     }
+}
+
+fn youtube_thumbnail_url(url: &str) -> Option<String> {
+    let host = url
+        .split("//")
+        .nth(1)?
+        .split('/')
+        .next()?
+        .split(':')
+        .next()?;
+    let video_id = if host.eq_ignore_ascii_case("youtu.be") {
+        url.split("//")
+            .nth(1)?
+            .split('/')
+            .nth(1)?
+            .split(['?', '&'])
+            .next()?
+    } else if host.ends_with("youtube.com") {
+        url.split('?')
+            .nth(1)?
+            .split('&')
+            .find_map(|part| part.strip_prefix("v="))?
+    } else {
+        return None;
+    };
+    if video_id.is_empty() {
+        return None;
+    }
+    Some(format!("https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"))
 }
 
 fn parse_value(json: &str) -> Result<Value, ParseError> {

@@ -35,6 +35,7 @@ export type QueueItemState =
   | "Cancelled";
 
 export interface QueueItem {
+  playlistIndex?: number;
   savedRequest?: DownloadRequestDto;
   id: number;
   url: string;
@@ -49,6 +50,11 @@ export interface QueueItem {
   audios: AudioSourceDto[];
   selectedVideo: VideoSourceDto | null;
   selectedAudio: AudioSourceDto | null;
+}
+
+export interface PlaylistChoice extends PlaylistInfoDto {
+  selected: boolean[];
+  search: string;
 }
 
 const MAX_LOG_LINES = 1000;
@@ -190,9 +196,76 @@ export class DownloadStore {
   private queueLoaded = false;
   lastOutputPath = $state<string | null>(null);
   importText = $state("");
+  playlistChoice = $state<PlaylistChoice | null>(null);
   keepDuplicates = $state(false);
   saveLog = $state(false);
   get importPreview() { return previewLinks(this.importText, this.queue.map(item => item.url)); }
+
+  get filteredPlaylistEntries() {
+    const choice = this.playlistChoice;
+    if (!choice) return [];
+    const query = choice.search.trim().toLocaleLowerCase();
+    return choice.entries.map((entry, position) => ({ entry, position }))
+      .filter(({ entry }) => !query || `${entry.index} ${entry.title} ${entry.url}`.toLocaleLowerCase().includes(query));
+  }
+
+  setPlaylistSearch(value: string): void {
+    if (this.playlistChoice) this.playlistChoice.search = value;
+  }
+
+  togglePlaylistEntry(position: number): void {
+    const choice = this.playlistChoice;
+    if (choice && position >= 0 && position < choice.selected.length) choice.selected[position] = !choice.selected[position];
+  }
+
+  selectPlaylistEntries(selected: boolean): void {
+    const choice = this.playlistChoice;
+    if (!choice) return;
+    for (const { position } of this.filteredPlaylistEntries) choice.selected[position] = selected;
+  }
+
+  selectPlaylistRange(from: number, to: number): void {
+    const choice = this.playlistChoice;
+    if (!choice) return;
+    const start = Math.max(1, Math.min(choice.entries.length, Math.min(from, to)));
+    const end = Math.max(1, Math.min(choice.entries.length, Math.max(from, to)));
+    choice.selected = choice.entries.map((entry, i) => entry.index >= start && entry.index <= end);
+  }
+
+  confirmPlaylistSelection(): void {
+    const choice = this.playlistChoice;
+    if (!choice) return;
+    const selected = choice.entries.filter((_, position) => choice.selected[position]);
+    if (!selected.length) { this.statusText = "请至少选择一个播放列表条目。"; return; }
+    for (const entry of selected) {
+      if (!entry.url.trim() || this.queue.some(item => linkKey(item.url) === linkKey(entry.url))) continue;
+      const item = this.makeItem(entry.url, entry.title, entry.thumbnailUrl);
+      item.playlistIndex = entry.index;
+      this.queue.push(item);
+    }
+    this.playlistChoice = null;
+    this.url = "";
+    this.statusText = `已加入 ${selected.length} 个选中视频，正在逐个解析…`;
+    void this.persistQueue();
+    void this.parseQueue();
+  }
+
+  confirmExternalPlaylistSelection(entries: PlaylistInfoDto["entries"]): void {
+    if (!this.playlistChoice) return;
+    const selected = new Set(entries.map(entry => entry.index));
+    for (const entry of this.playlistChoice.entries) {
+      if (!selected.has(entry.index) || !entry.url.trim() || this.queue.some(item => linkKey(item.url) === linkKey(entry.url))) continue;
+      const item = this.makeItem(entry.url, entry.title, entry.thumbnailUrl);
+      item.playlistIndex = entry.index;
+      this.queue.push(item);
+    }
+    const count = selected.size;
+    this.playlistChoice = null;
+    this.url = "";
+    this.statusText = `已加入 ${count} 个选中视频，正在逐个解析…`;
+    void this.persistQueue();
+    void this.parseQueue();
+  }
 
   importLinks(): void {
     const entries = this.importPreview.filter(entry => entry.status === "valid" || (entry.status === "duplicate" && this.keepDuplicates));
@@ -704,8 +777,8 @@ export class DownloadStore {
       return;
     }
 
-    this.expandPlaylistToQueue(playlist);
-    await this.parseQueue();
+    this.playlistChoice = { ...playlist, selected: playlist.entries.map(() => false), search: "" };
+    this.statusText = `播放列表“${playlist.title}”共 ${playlist.entries.length} 项，请选择要下载的内容。`;
   }
 
   private applyMediaInfo(info: MediaInfoDto): void {
@@ -736,23 +809,12 @@ export class DownloadStore {
             : `解析完成：${info.title}（未找到可下载格式，请稍后重新解析）`;
   }
 
-  private expandPlaylistToQueue(playlist: PlaylistInfoDto): void {
-    for (const entry of playlist.entries) {
-      if (!entry.url.trim()) continue;
-      if (this.queue.some(item => linkKey(item.url) === linkKey(entry.url))) continue;
-      this.queue.push(this.makeItem(entry.url, entry.title));
-    }
-
-    this.url = "";
-    this.statusText = `检测到播放列表“${playlist.title}”：已加入 ${playlist.entries.length} 个视频，正在逐个解析…`;
-  }
-
-  private makeItem(url: string, title?: string): QueueItem {
+  private makeItem(url: string, title?: string, thumbnailUrl?: string | null): QueueItem {
     return {
       id: this.nextId++,
       url,
       title: title && title.trim() ? title : url,
-      thumbnailUrl: null,
+      thumbnailUrl: thumbnailUrl ?? null,
       state: "Pending",
       progress: 0,
       outputPath: null,

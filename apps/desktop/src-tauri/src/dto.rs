@@ -102,8 +102,10 @@ impl From<&MediaInfo> for MediaInfoDto {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaylistEntryDto {
+    pub index: usize,
     pub url: String,
     pub title: String,
+    pub thumbnail_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -123,8 +125,10 @@ impl From<&PlaylistInfo> for PlaylistInfoDto {
                 .entries
                 .iter()
                 .map(|entry| PlaylistEntryDto {
+                    index: entry.index,
                     url: entry.url.clone(),
                     title: entry.title.clone(),
+                    thumbnail_url: entry.thumbnail_url.clone(),
                 })
                 .collect(),
         }
